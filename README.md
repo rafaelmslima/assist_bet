@@ -107,6 +107,8 @@ Para migrar de SQLite para PostgreSQL, altere apenas:
 DATABASE_URL=postgresql+psycopg://usuario:senha@host:5432/database
 ```
 
+Se o provedor entregar `postgresql://...` ou `postgres://...`, o app converte automaticamente para o driver `psycopg` usado no `requirements.txt`.
+
 Para produção, recomenda-se adicionar Alembic antes de evoluir o schema.
 
 ## Railway
@@ -148,4 +150,3 @@ python -m unittest discover
 ## Aviso responsável
 
 Este bot é ferramenta de apoio à análise. Ele não garante lucro, não prevê resultado com certeza e não substitui gestão de banca. Apostas envolvem risco.
-

@@ -12,10 +12,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 load_dotenv(PROJECT_ROOT / ".env")
 
 
+def _database_url_from_env() -> str:
+    raw_url = os.getenv("DATABASE_URL", "sqlite:///./sports_betting_assistant.db")
+    if raw_url.startswith("postgres://"):
+        return raw_url.replace("postgres://", "postgresql+psycopg://", 1)
+    if raw_url.startswith("postgresql://"):
+        return raw_url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return raw_url
+
+
 @dataclass(frozen=True)
 class Settings:
     telegram_bot_token: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
-    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./sports_betting_assistant.db")
+    database_url: str = _database_url_from_env()
 
     api_football_key: str | None = os.getenv("API_FOOTBALL_KEY")
     api_football_base_url: str = os.getenv("API_FOOTBALL_BASE_URL", "https://v3.football.api-sports.io")

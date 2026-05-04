@@ -13,6 +13,7 @@ from app.integrations.api_football_client import ApiFootballClient
 from app.services.analysis_service import AnalysisService
 from app.services.bet_advisor_service import BetAdvisorService
 from app.services.card_service import generate_pre_match_card
+from app.services.football_context_service import FootballContextService
 from app.services.football_player_service import FootballPlayerService
 from app.services.odds_service import OddsService
 from app.services.player_advisor_service import PlayerAdvisorService, format_fixture_player_advice
@@ -59,6 +60,7 @@ class FixtureMenuService:
         self.analysis_service = analysis_service or AnalysisService()
         self.player_service = FootballPlayerService(self.client)
         self.player_advisor = PlayerAdvisorService()
+        self.football_context_service = FootballContextService()
 
     def get_supported_leagues(self) -> tuple[LeagueConfig, ...]:
         return SUPPORTED_LEAGUES
@@ -217,6 +219,10 @@ class FixtureMenuService:
             "alerts": ["confirme escalações antes de apostar"],
         }
 
+        football_context = self._build_football_context(fixture)
+        context["football_context"] = football_context
+        context["alerts"] = (football_context.get("context_alerts") or []) + context["alerts"]
+
         home_analysis = self.analysis_service.analyze_team(home_team_data)
         away_analysis = self.analysis_service.analyze_team(away_team_data)
         matchup = self.analysis_service.analyze_matchup(home_team_data, away_team_data, context)
@@ -266,6 +272,7 @@ class FixtureMenuService:
             "player_advice": player_advice,
             "predictions": predictions,
             "lineups_confirmed": lineups_confirmed,
+            "football_context": football_context,
         }
         advice = BetAdvisorService().advise_fixture_bets(fixture_data)
         advisor_text = format_bet_advisor_response(advice)
@@ -280,6 +287,19 @@ class FixtureMenuService:
             "advice": advice,
             "player_advice": player_advice,
         }
+
+    def _build_football_context(self, fixture: dict[str, Any]) -> dict[str, Any]:
+        league_id = fixture.get("league_id")
+        season = fixture.get("season")
+        standings_response = self.client.get_standings(league_id, season) if league_id and season else {"ok": False}
+        home_schedule_response = self.client.get_team_next_fixtures(fixture["home_team_id"], next_games=10)
+        away_schedule_response = self.client.get_team_next_fixtures(fixture["away_team_id"], next_games=10)
+        return self.football_context_service.build_context_summary(
+            fixture=fixture,
+            standings_response=standings_response,
+            home_schedule_response=home_schedule_response,
+            away_schedule_response=away_schedule_response,
+        )
 
     def _find_fixture_between_teams(self, team_id: int, home_query: str, away_query: str) -> dict[str, Any] | None:
         for league in self.get_supported_leagues():

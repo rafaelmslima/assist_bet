@@ -29,6 +29,7 @@ class BetAdvisorService:
         context = fixture_analysis.get("context") or {}
         odds = _as_list(fixture_analysis.get("odds"))
         player_advice = fixture_analysis.get("player_advice") or {}
+        football_context = fixture_analysis.get("football_context") or context.get("football_context") or {}
 
         candidates = self._score_football_markets(home, away, context, odds)
         candidates = sorted(candidates, key=lambda item: item.score, reverse=True)
@@ -74,6 +75,7 @@ class BetAdvisorService:
             "avoid_markets": avoid,
             "key_factors": main.reasons[:4],
             "warnings": warnings[:4],
+            "context_summary": football_context,
             "final_verdict": _final_verdict(fixture, main, value, warnings),
         }
 
@@ -234,6 +236,7 @@ class BetAdvisorService:
             "avoid_markets": self._avoid_markets(candidates, home, away, context),
             "key_factors": ["dados insuficientes ou conflitantes"],
             "warnings": ["melhor esperar escalações, odds e leitura inicial do jogo"],
+            "context_summary": context.get("football_context") or {},
             "final_verdict": "Minha recomendação aqui é NÃO FORÇAR entrada pré-jogo. Se quiser atuar, eu olharia live com stake menor.",
         }
 

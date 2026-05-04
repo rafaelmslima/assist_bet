@@ -42,6 +42,7 @@ def format_bet_advisor_response(advice: dict[str, Any]) -> str:
     away = fixture.get("away_team") or fixture.get("away_team_name") or "Visitante"
     main = advice.get("main_recommendation") or {}
     value = main.get("value")
+    return _format_compact_bet_advisor_response(advice, fixture, home, away, main, value)
 
     lines = [
         f"🎯 {home} x {away}",
@@ -90,6 +91,65 @@ def format_pre_match_card(card: dict[str, Any]) -> str:
     if advice:
         return format_bet_advisor_response(advice)
     return str(card)
+
+
+def _format_compact_bet_advisor_response(
+    advice: dict[str, Any],
+    fixture: dict[str, Any],
+    home: str,
+    away: str,
+    main: dict[str, Any],
+    value: dict[str, Any] | None,
+) -> str:
+    lines = [
+        f"{home} x {away}",
+        "",
+        f"Melhor aposta: {main.get('selection', 'evitar')} ({main.get('market', 'mercado')})",
+    ]
+
+    summary = main.get("summary")
+    if summary:
+        lines.append(f"Motivo: {summary}")
+    else:
+        reasons = _plain_limited_lines(
+            advice.get("key_factors"),
+            fallback="Dados ainda limitados para sustentar leitura forte.",
+            limit=2,
+        )
+        lines.append(f"Motivo: {' '.join(reasons)}")
+
+    lines.extend(["", "Contexto:"])
+    lines.extend(_context_lines(advice.get("context_summary")))
+
+    lines.extend(["", "Odds/preco:"])
+    lines.extend(_format_value_block(value, main)[:3])
+
+    alternatives = advice.get("alternative_recommendations") or []
+    if alternatives:
+        lines.extend(["", "Alternativas:"])
+        for item in alternatives[:2]:
+            reason = item.get("reason")
+            suffix = f" - {reason}" if reason else ""
+            lines.append(f"- {item.get('selection')} ({item.get('market')}){suffix}")
+
+    avoid = advice.get("avoid_markets") or []
+    lines.extend(["", "Evitaria:"])
+    if avoid:
+        item = avoid[0]
+        reason = item.get("reason")
+        lines.append(f"{item.get('market')}" + (f" - {reason}" if reason else ""))
+    else:
+        lines.append("Entrada forte sem confirmar odds e escalacoes.")
+
+    lines.extend(
+        [
+            "",
+            f"Veredito: {advice.get('final_verdict') or 'Eu nao forcaria entrada sem confirmar odds e escalacoes.'}",
+            "",
+            "Use como apoio, nao garantia. Aposte com gestao de banca.",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def format_value_response(value: dict[str, Any]) -> str:
@@ -235,6 +295,24 @@ def _bullet_lines(items: Any, fallback: str, limit: int = 5) -> list[str]:
     if isinstance(items, str):
         return [f"- {items}"]
     return [f"- {item}" for item in list(items)[:limit]]
+
+
+def _plain_limited_lines(items: Any, fallback: str, limit: int = 2) -> list[str]:
+    if not items:
+        return [fallback]
+    if isinstance(items, str):
+        return [items]
+    values = [str(item) for item in list(items)[:limit] if item]
+    return values or [fallback]
+
+
+def _context_lines(context_summary: Any) -> list[str]:
+    if not isinstance(context_summary, dict):
+        return ["Contexto indisponivel."]
+    lines = context_summary.get("summary_lines") or []
+    if not lines:
+        return ["Contexto indisponivel."]
+    return [str(item) for item in lines[:2] if item] or ["Contexto indisponivel."]
 
 
 def format_bets_message(bets: list[Bet]) -> str:

@@ -81,7 +81,7 @@ class FootballContextService:
         calendar = _upcoming_international_summary(team_name, fixture_date, schedule)
         table = _table_objective_summary(team_id, team_name, league_id, standings)
 
-        if calendar and table != INSUFFICIENT_CONTEXT:
+        if calendar and INSUFFICIENT_CONTEXT not in table:
             return {"summary": f"{calendar} {table}", "alert": calendar}
         if calendar:
             return {"summary": calendar, "alert": calendar}
@@ -238,4 +238,3 @@ def _to_int(value: Any) -> int | None:
 
 def _compact_name(value: str) -> str:
     return " ".join(value.strip().lower().replace("-", " ").split())
-

@@ -115,6 +115,7 @@ class FixtureMenuService:
                         "score": score,
                         "fixture": payload.get("fixture") or fixture,
                         "main": main,
+                        "context": advice.get("context_summary") or {},
                         "verdict": advice.get("final_verdict"),
                     }
                 )
@@ -132,16 +133,17 @@ class FixtureMenuService:
         for index, item in enumerate(candidates[:limit], start=1):
             fixture = item["fixture"]
             main = item["main"]
+            context_lines = (item.get("context") or {}).get("summary_lines") or []
             home = fixture.get("home_team") or "Mandante"
             away = fixture.get("away_team") or "Visitante"
             lines.extend(
                 [
                     "",
                     f"{index}. {home} x {away}",
-                    f"Melhor aposta: {main.get('market')} - {main.get('selection')}",
-                    f"Confiança: {main.get('confidence')} | Risco: {main.get('risk_level')}",
+                    f"Melhor aposta: {main.get('selection')} ({main.get('market')})",
+                    f"Contexto: {_join_context_lines(context_lines)}",
                     f"Odd justa: {main.get('fair_odd') or 'dados insuficientes'}",
-                    f"O que eu faria: {item.get('verdict')}",
+                    f"Veredito: {item.get('verdict')}",
                 ]
             )
         return "\n".join(lines)
@@ -527,6 +529,13 @@ def _format_bullets(items: list[str]) -> list[str]:
     if not items:
         return [f"- {INSUFFICIENT_DATA}"]
     return [f"- {item}" for item in items]
+
+
+def _join_context_lines(lines: Any) -> str:
+    if not isinstance(lines, list) or not lines:
+        return "contexto indisponivel"
+    cleaned = [str(line).strip() for line in lines[:2] if str(line).strip()]
+    return " | ".join(cleaned) if cleaned else "contexto indisponivel"
 
 
 def _parse_fixture_name(value: str) -> tuple[str, str] | None:

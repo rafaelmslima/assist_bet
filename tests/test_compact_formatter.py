@@ -34,7 +34,28 @@ class CompactFormatterTest(unittest.TestCase):
         self.assertNotIn("Por que faz sentido", text)
         self.assertLessEqual(len(text.splitlines()), 24)
 
+    def test_formatter_keeps_context_for_player_prop_recommendation(self) -> None:
+        text = format_bet_advisor_response(
+            {
+                "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
+                "main_recommendation": {
+                    "market": "Prop de jogador - finalizacoes",
+                    "selection": "Saka: over 2.5 finalizacoes",
+                    "summary": "Mercado de jogo sem clareza; prop tem caminho melhor.",
+                },
+                "context_summary": {
+                    "summary_lines": [
+                        "Arsenal: jogo de Champions League em 4 dias.",
+                        "Chelsea: meio de tabela.",
+                    ]
+                },
+                "final_verdict": "Eu so entraria com linha e odd justas.",
+            }
+        )
+
+        self.assertIn("Arsenal: jogo de Champions League em 4 dias.", text)
+        self.assertIn("Chelsea: meio de tabela.", text)
+
 
 if __name__ == "__main__":
     unittest.main()
-

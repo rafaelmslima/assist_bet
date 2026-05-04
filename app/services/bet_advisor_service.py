@@ -33,7 +33,7 @@ class BetAdvisorService:
 
         candidates = self._score_football_markets(home, away, context, odds)
         candidates = sorted(candidates, key=lambda item: item.score, reverse=True)
-        prop_response = _prop_recommendation(fixture, player_advice, candidates, odds)
+        prop_response = _prop_recommendation(fixture, player_advice, candidates, odds, football_context)
         if prop_response is not None:
             return prop_response
 
@@ -396,6 +396,7 @@ def _prop_recommendation(
     player_advice: dict[str, Any],
     candidates: list[MarketCandidate],
     odds: list[dict[str, Any]],
+    football_context: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     best = player_advice.get("best") if isinstance(player_advice, dict) else None
     if not best:
@@ -454,6 +455,7 @@ def _prop_recommendation(
         ],
         "key_factors": list(best.get("reasons") or [])[:4],
         "warnings": _unique(warnings)[:4],
+        "context_summary": football_context or {},
         "final_verdict": (
             f"Eu trataria {player} em {best.get('market')} como a melhor shortlist, mas so entraria com linha e odd justas."
         ),

@@ -110,21 +110,7 @@ def _table_objective_summary(
     if not rules:
         return f"{team_name}: {INSUFFICIENT_CONTEXT}."
 
-    champions_to = int(rules["champions_to"])
-    continental_to = int(rules["continental_to"])
-    relegation_count = int(rules["relegation_count"])
-    continental_label = str(rules["continental_label"])
-
-    if position <= champions_to:
-        label = "Libertadores" if league_id == 71 else "Champions"
-        return f"{team_name}: briga por {label}."
-    if position <= continental_to:
-        return f"{team_name}: briga por {continental_label}."
-    if total and position >= total - relegation_count + 1:
-        return f"{team_name}: luta contra rebaixamento."
-    if total:
-        return f"{team_name}: meio de tabela."
-    return f"{team_name}: {INSUFFICIENT_CONTEXT}."
+    return _domestic_table_objective(team_name, league_id, row, standings, rules, total)
 
 
 def _upcoming_international_summary(
@@ -150,6 +136,67 @@ def _upcoming_international_summary(
     if not next_game:
         return None
     return f"{team_name}: jogo de {next_game['league']} em {next_game['days']} dias."
+
+
+def _domestic_table_objective(
+    team_name: str,
+    league_id: int | None,
+    row: dict[str, Any],
+    standings: list[dict[str, Any]],
+    rules: dict[str, int | str],
+    total: int | None,
+) -> str:
+    position = _to_int(row.get("rank") or row.get("position"))
+    points = _row_points(row)
+    played = _row_played(row) or _max_played(standings)
+    games_remaining = _games_remaining(total, played)
+    if position is None or total is None:
+        return f"{team_name}: {INSUFFICIENT_CONTEXT}."
+
+    champions_to = int(rules["champions_to"])
+    continental_to = int(rules["continental_to"])
+    relegation_count = int(rules["relegation_count"])
+    continental_label = str(rules["continental_label"])
+    top_label = "Libertadores" if league_id == 71 else "Champions"
+    target_label = top_label if position <= champions_to else continental_label
+
+    if position <= continental_to:
+        label = top_label if position <= champions_to else continental_label
+        suffix = _remaining_suffix(games_remaining)
+        return f"{team_name}: esta em zona de {label}, mas ainda precisa sustentar{suffix}."
+
+    relegation_start = total - relegation_count + 1
+    relegation_gap = _distance_to_relegation(row, standings, relegation_start)
+    if position >= relegation_start:
+        return f"{team_name}: pressionado por rebaixamento; esta na zona."
+    if relegation_gap is not None and relegation_gap <= 6:
+        return f"{team_name}: pressionado por rebaixamento; esta a {relegation_gap} pontos da zona."
+
+    if points is None:
+        return f"{team_name}: meio de tabela, sem briga continental clara (contexto parcial)."
+
+    continental_gap = _distance_to_continental(row, standings, continental_to)
+    if continental_gap is None:
+        return f"{team_name}: meio de tabela, sem briga continental clara (contexto parcial)."
+
+    if games_remaining is None:
+        if continental_gap <= 6:
+            return f"{team_name}: briga por {continental_label}; esta a {continental_gap} pontos da zona (contexto parcial)."
+        return f"{team_name}: meio de tabela, sem briga continental clara (contexto parcial)."
+
+    direct_threshold = min(6, games_remaining * 1.5)
+    math_threshold = games_remaining * 3
+    if continental_gap <= direct_threshold:
+        return (
+            f"{team_name}: briga diretamente por {continental_label}; "
+            f"esta a {continental_gap} pontos do {continental_to}o com {games_remaining} jogos restantes."
+        )
+    if continental_gap <= math_threshold:
+        return (
+            f"{team_name}: chance matematica de {continental_label}, mas cenario distante; "
+            f"esta a {continental_gap} pontos com {games_remaining} jogos."
+        )
+    return f"{team_name}: meio de tabela, sem briga continental clara."
 
 
 def _flatten_standings(data: Any) -> list[dict[str, Any]]:
@@ -191,6 +238,58 @@ def _standing_group_size(row: dict[str, Any], standings: list[dict[str, Any]]) -
     if explicit:
         return explicit
     return len(standings) if standings else None
+
+
+def _row_points(row: dict[str, Any]) -> int | None:
+    return _to_int(row.get("points") or row.get("pts"))
+
+
+def _row_played(row: dict[str, Any]) -> int | None:
+    return _to_int(_nested_get(row, "all", "played") or row.get("played") or row.get("matches_played"))
+
+
+def _max_played(standings: list[dict[str, Any]]) -> int | None:
+    played_values = [_row_played(row) for row in standings]
+    known = [value for value in played_values if value is not None]
+    return max(known) if known else None
+
+
+def _games_remaining(total: int | None, played: int | None) -> int | None:
+    if total is None or played is None:
+        return None
+    scheduled = (total - 1) * 2
+    return max(0, scheduled - played)
+
+
+def _distance_to_continental(row: dict[str, Any], standings: list[dict[str, Any]], continental_to: int) -> int | None:
+    points = _row_points(row)
+    target = _row_by_rank(standings, continental_to)
+    target_points = _row_points(target or {})
+    if points is None or target_points is None:
+        return None
+    return max(0, target_points - points)
+
+
+def _distance_to_relegation(row: dict[str, Any], standings: list[dict[str, Any]], relegation_start: int) -> int | None:
+    points = _row_points(row)
+    target = _row_by_rank(standings, relegation_start)
+    target_points = _row_points(target or {})
+    if points is None or target_points is None:
+        return None
+    return max(0, points - target_points)
+
+
+def _row_by_rank(standings: list[dict[str, Any]], rank: int) -> dict[str, Any] | None:
+    for row in standings:
+        if _to_int(row.get("rank") or row.get("position")) == rank:
+            return row
+    return None
+
+
+def _remaining_suffix(games_remaining: int | None) -> str:
+    if games_remaining is None:
+        return ""
+    return f"; {games_remaining} jogos restantes"
 
 
 def _is_international_competition(name: str) -> bool:

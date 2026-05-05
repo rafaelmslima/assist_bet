@@ -13,7 +13,7 @@ INTERNATIONAL_COMPETITIONS = (
     "sul-americana",
     "sudamericana",
 )
-CUP_LEAGUE_IDS = {2, 3, 13}
+CUP_LEAGUE_IDS = {2, 3, 11, 13}
 
 
 DOMESTIC_RULES: dict[int, dict[str, int | str]] = {

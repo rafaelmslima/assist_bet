@@ -320,6 +320,7 @@ class ApiFootballClient:
             61: "Ligue 1",
             2: "Champions League",
             3: "Europa League",
+            11: "Copa Sul-Americana",
             13: "Libertadores",
             71: "Brasileirao",
             88: "Eredivisie",

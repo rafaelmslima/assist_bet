@@ -43,6 +43,7 @@ SUPPORTED_LEAGUES: tuple[LeagueConfig, ...] = (
     LeagueConfig("champions_league", "Champions League", 2, 2025),
     LeagueConfig("europa_league", "Europa League", 3, 2025),
     LeagueConfig("libertadores", "Libertadores", 13, 2026),
+    LeagueConfig("sulamericana", "Copa Sul-Americana", 11, 2026),
     LeagueConfig("brasileirao", "Brasileirão", 71, 2026),
     LeagueConfig("eredivisie", "Eredivisie - Holanda 1ª Divisão", 88, 2025),
 )

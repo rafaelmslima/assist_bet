@@ -17,6 +17,7 @@ FOOTBALL_LEAGUE_TO_ODDS_SPORT = {
     71: "soccer_brazil_campeonato",
     88: "soccer_netherlands_eredivisie",
     13: "soccer_conmebol_copa_libertadores",
+    11: "soccer_conmebol_copa_sudamericana",
 }
 
 

@@ -19,6 +19,6 @@ def register_commands(application: Application) -> None:
     application.add_handler(CommandHandler("roi", roi_command))
     application.add_handler(CommandHandler("resultado", result_command))
     application.add_handler(CallbackQueryHandler(tutorial_step_handler, pattern=r"^tutorial_"))
-    application.add_handler(CallbackQueryHandler(fixture_callback, pattern=r"^rec:"))
+    application.add_handler(CallbackQueryHandler(fixture_callback, pattern=r"^(rec:|recleague:)"))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, button_router))
     application.add_error_handler(telegram_error_handler)

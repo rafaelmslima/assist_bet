@@ -25,6 +25,7 @@ from app.services.recommendation_service import RecommendationService
 
 
 CALLBACK_PREFIX = "rec:"
+LEAGUE_PREFIX = "recleague:"
 
 
 def _service(context: ContextTypes.DEFAULT_TYPE) -> RecommendationService:
@@ -69,8 +70,13 @@ async def fixture_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if query is None or query.data is None:
         return
     await query.answer()
-    _, sport, fixture_id = query.data.split(":")
-    fixtures = _service(context).list_games(sport, "today") + _service(context).list_games(sport, "tomorrow")
+    if query.data.startswith(LEAGUE_PREFIX):
+        _, sport, when, league_name = query.data.split(":", 3)
+        await _show_games_by_league(query, context, sport, when, league_name)
+        return
+
+    _, sport, when, fixture_id = query.data.split(":")
+    fixtures = _service(context).list_games(sport, when)
     fixture = next((f for f in fixtures if str(f.get("fixture_id")) == str(fixture_id)), None)
     if not fixture:
         await query.edit_message_text("Não consegui localizar esse jogo.")
@@ -87,11 +93,29 @@ async def _show_games(update: Update, context: ContextTypes.DEFAULT_TYPE, when: 
     if not fixtures:
         await update.message.reply_text("Sem jogos para esse período.")
         return
+    if sport == "football":
+        leagues = sorted({str(f.get("league") or "Outras") for f in fixtures})
+        rows = [[InlineKeyboardButton(lg, callback_data=f"{LEAGUE_PREFIX}{sport}:{when}:{lg}")] for lg in leagues[:20]]
+        await update.message.reply_text("Escolha a liga/competição:", reply_markup=InlineKeyboardMarkup(rows))
+        return
     rows = [
-        [InlineKeyboardButton(f"{f.get('home_team')} x {f.get('away_team')}", callback_data=f"{CALLBACK_PREFIX}{sport}:{f.get('fixture_id')}")]
+        [InlineKeyboardButton(f"{f.get('home_team')} x {f.get('away_team')}", callback_data=f"{CALLBACK_PREFIX}{sport}:{when}:{f.get('fixture_id')}")]
         for f in fixtures[:15]
     ]
     await update.message.reply_text("Escolha o jogo para análise completa:", reply_markup=InlineKeyboardMarkup(rows))
+
+
+async def _show_games_by_league(query, context: ContextTypes.DEFAULT_TYPE, sport: str, when: str, league_name: str) -> None:
+    fixtures = _service(context).list_games(sport, when)
+    selected = [f for f in fixtures if str(f.get("league") or "") == league_name]
+    if not selected:
+        await query.edit_message_text(f"Sem jogos para {league_name} nesse período.")
+        return
+    rows = [
+        [InlineKeyboardButton(f"{f.get('home_team')} x {f.get('away_team')}", callback_data=f"{CALLBACK_PREFIX}{sport}:{when}:{f.get('fixture_id')}")]
+        for f in selected[:20]
+    ]
+    await query.edit_message_text(f"{league_name}\n\nEscolha o jogo para análise completa:", reply_markup=InlineKeyboardMarkup(rows))
 
 
 async def _show_best(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

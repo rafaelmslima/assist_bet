@@ -4,6 +4,7 @@ import unicodedata
 from typing import Any
 
 from app.integrations.odds_api_client import OddsApiClient
+from app.services.cache_service import cache_key, default_cache
 
 
 FOOTBALL_LEAGUE_TO_ODDS_SPORT = {
@@ -26,13 +27,25 @@ class OddsService:
         self.client = client or OddsApiClient()
 
     def get_event_odds(self, sport_key: str, event_id: str) -> dict:
-        return self.client.get_event_odds(sport_key=sport_key, event_id=event_id)
+        return default_cache.get_or_set(
+            cache_key("odds.event", sport_key, event_id),
+            120,
+            lambda: self.client.get_event_odds(sport_key=sport_key, event_id=event_id),
+        )
 
     def get_today_odds(self, sport_key: str) -> dict:
-        return self.client.get_today_odds(sport_key=sport_key)
+        return default_cache.get_or_set(
+            cache_key("odds.today", sport_key),
+            120,
+            lambda: self.client.get_today_odds(sport_key=sport_key),
+        )
 
     def get_market_odds(self, sport_key: str, market: str) -> dict:
-        return self.client.get_market_odds(sport_key=sport_key, market=market)
+        return default_cache.get_or_set(
+            cache_key("odds.market", sport_key, market),
+            120,
+            lambda: self.client.get_market_odds(sport_key=sport_key, market=market),
+        )
 
     def find_football_fixture_odds(
         self,
@@ -110,9 +123,9 @@ def _find_matching_event(events: list[dict[str, Any]], home_team: str, away_team
     for event in events:
         event_home = _normalize_name(event.get("home_team"))
         event_away = _normalize_name(event.get("away_team"))
-        if _names_match(wanted_home, event_home) and _names_match(wanted_away, event_away):
+        if _event_score(wanted_home, wanted_away, event_home, event_away) >= 1.6:
             return event
-        if _names_match(wanted_home, event_away) and _names_match(wanted_away, event_home):
+        if _event_score(wanted_home, wanted_away, event_away, event_home) >= 1.6:
             return event
     return None
 
@@ -151,12 +164,40 @@ def _normalize_name(value: Any) -> str:
     text = unicodedata.normalize("NFKD", text)
     text = "".join(char for char in text if not unicodedata.combining(char))
     replacements = {" fc": "", " afc": "", " cf": "", " sc": "", ".": "", "-": " "}
+    aliases = {
+        "man utd": "manchester united",
+        "man united": "manchester united",
+        "man city": "manchester city",
+        "spurs": "tottenham",
+        "psg": "paris saint germain",
+        "internazionale": "inter milan",
+    }
     for old, new in replacements.items():
         text = text.replace(old, new)
-    return " ".join(text.split())
+    normalized = " ".join(text.split())
+    return aliases.get(normalized, normalized)
 
 
 def _names_match(left: str, right: str) -> bool:
     if not left or not right:
         return False
-    return left == right or left in right or right in left
+    return _name_score(left, right) >= 0.8
+
+
+def _event_score(wanted_home: str, wanted_away: str, event_home: str, event_away: str) -> float:
+    return _name_score(wanted_home, event_home) + _name_score(wanted_away, event_away)
+
+
+def _name_score(left: str, right: str) -> float:
+    if not left or not right:
+        return 0.0
+    if left == right:
+        return 1.0
+    if left in right or right in left:
+        return 0.9
+    left_tokens = {token for token in left.split() if len(token) >= 3}
+    right_tokens = {token for token in right.split() if len(token) >= 3}
+    if not left_tokens or not right_tokens:
+        return 0.0
+    overlap = len(left_tokens & right_tokens)
+    return overlap / max(len(left_tokens), len(right_tokens))

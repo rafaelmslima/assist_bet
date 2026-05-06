@@ -2,6 +2,24 @@ from __future__ import annotations
 
 from enum import StrEnum
 
+from app.bot.keyboards import (
+    BTN_BACK,
+    BTN_BEST_GAMES,
+    BTN_FOOTBALL,
+    BTN_HELP,
+    BTN_MY_BETS,
+    BTN_NBA,
+    BTN_NBA_BEST,
+    BTN_NBA_PLAYERS,
+    BTN_NBA_TODAY,
+    BTN_NBA_TOMORROW,
+    BTN_PLAYERS,
+    BTN_SEARCH_GAME,
+    BTN_SETTINGS,
+    BTN_TODAY,
+    BTN_TOMORROW,
+)
+
 
 class UserIntent(StrEnum):
     FOOTBALL = "football"
@@ -29,39 +47,21 @@ class UserIntent(StrEnum):
 
 
 BUTTON_TO_INTENT = {
-    "⚽ Futebol": UserIntent.FOOTBALL,
-    "🏀 NBA": UserIntent.NBA,
-    "⭐ Jogos com Melhor Leitura": UserIntent.BEST_GAMES,
-    "👟 Jogadores do Dia": UserIntent.PLAYERS_OF_DAY,
-    "🔎 Buscar Jogo": UserIntent.ANALYZE_GAME,
-    "⬅️ Voltar": UserIntent.BACK,
-    "📅 Jogos de Hoje": UserIntent.TODAY_GAMES,
-    "📆 Jogos de Amanhã": UserIntent.TOMORROW_GAMES,
-    "📈 Minhas Apostas": UserIntent.MY_BETS,
-    "❓ Ajuda": UserIntent.HELP,
-    "⚙️ Configurações": UserIntent.SETTINGS,
-    "🏀 Jogos de Hoje": UserIntent.NBA_TODAY_GAMES,
-    "🏀 Jogos de Amanhã": UserIntent.NBA_TOMORROW_GAMES,
-    "🏀 Jogadores do Dia": UserIntent.NBA_PLAYERS_OF_DAY,
-    "🏀 Jogos com Melhor Leitura": UserIntent.NBA_BEST_GAMES,
-    "⚽ Futebol": UserIntent.FOOTBALL,
-    "🏀 NBA": UserIntent.NBA,
-    "⭐ Jogos com Melhor Leitura": UserIntent.BEST_GAMES,
-    "👟 Jogadores do Dia": UserIntent.PLAYERS_OF_DAY,
-    "🔎 Buscar Jogo": UserIntent.ANALYZE_GAME,
-    "⬅️ Voltar": UserIntent.BACK,
-    "📊 Analisar Jogo": UserIntent.ANALYZE_GAME,
-    "🏟️ Analisar Time": UserIntent.ANALYZE_TEAM,
-    "👤 Analisar Jogador": UserIntent.ANALYZE_PLAYER,
-    "🔥 Top Props": UserIntent.TOP_PROPS,
-    "📅 Jogos de Hoje": UserIntent.TODAY_GAMES,
-    "💰 Ver Odds": UserIntent.VIEW_ODDS,
-    "🧠 Value Betting": UserIntent.VALUE_BETTING,
-    "🧾 Card Pré-Jogo": UserIntent.PRE_GAME_CARD,
-    "➕ Registrar Aposta": UserIntent.REGISTER_BET,
-    "📈 Minhas Apostas": UserIntent.MY_BETS,
-    "❓ Ajuda": UserIntent.HELP,
-    "⚙️ Configurações": UserIntent.SETTINGS,
+    BTN_FOOTBALL: UserIntent.FOOTBALL,
+    BTN_NBA: UserIntent.NBA,
+    BTN_BEST_GAMES: UserIntent.BEST_GAMES,
+    BTN_PLAYERS: UserIntent.PLAYERS_OF_DAY,
+    BTN_SEARCH_GAME: UserIntent.ANALYZE_GAME,
+    BTN_BACK: UserIntent.BACK,
+    BTN_TODAY: UserIntent.TODAY_GAMES,
+    BTN_TOMORROW: UserIntent.TOMORROW_GAMES,
+    BTN_MY_BETS: UserIntent.MY_BETS,
+    BTN_HELP: UserIntent.HELP,
+    BTN_SETTINGS: UserIntent.SETTINGS,
+    BTN_NBA_TODAY: UserIntent.NBA_TODAY_GAMES,
+    BTN_NBA_TOMORROW: UserIntent.NBA_TOMORROW_GAMES,
+    BTN_NBA_PLAYERS: UserIntent.NBA_PLAYERS_OF_DAY,
+    BTN_NBA_BEST: UserIntent.NBA_BEST_GAMES,
 }
 
 
@@ -69,13 +69,13 @@ INTENT_PROMPTS = {
     UserIntent.ANALYZE_GAME: "Digite o jogo no formato: Arsenal x Chelsea",
     UserIntent.ANALYZE_TEAM: "Digite o nome do time:",
     UserIntent.ANALYZE_PLAYER: "Digite o nome do jogador:",
-    UserIntent.TOP_PROPS: "Digite o time e o mercado. Ex: Arsenal finalizações",
+    UserIntent.TOP_PROPS: "Digite o time e o mercado. Ex: Arsenal finalizacoes",
     UserIntent.VIEW_ODDS: "Digite o jogo:",
     UserIntent.VALUE_BETTING: "Digite o jogo e a odd. Ex: Arsenal x Chelsea odd 1.80",
     UserIntent.PRE_GAME_CARD: "Digite o jogo:",
     UserIntent.REGISTER_BET: (
         "Envie no formato:\n"
-        "jogo | mercado | seleção | odd | stake | motivo\n\n"
-        "Ex: Arsenal x Chelsea | finalizações | Saka over 2.5 | 1.85 | 50 | Chelsea cede muitas finalizações pelo lado esquerdo"
+        "jogo | mercado | selecao | odd | stake | motivo\n\n"
+        "Ex: Arsenal x Chelsea | finalizacoes | Saka over 2.5 | 1.85 | 50 | Chelsea cede muitas finalizacoes pelo lado esquerdo"
     ),
 }

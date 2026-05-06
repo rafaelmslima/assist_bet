@@ -29,7 +29,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         reply_markup=main_menu_keyboard(),
     )
     await update.message.reply_text(
-        "Quer aprender a usar o bot?",
+        "Quer ver um tutorial rapido?",
         reply_markup=start_tutorial_keyboard(),
     )
 

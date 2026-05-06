@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.bot.formatters import format_bet_advisor_response
 from app.integrations.api_football_client import ApiFootballClient
+from app.services.cache_service import cache_key, default_cache
 from app.services.analysis_service import AnalysisService
 from app.services.bet_advisor_service import BetAdvisorService
 from app.services.card_service import generate_pre_match_card
@@ -81,7 +82,14 @@ class FixtureMenuService:
             return {"ok": False, "error": "Liga não encontrada.", "fixtures": [], "league": None}
 
         target_date = (datetime.now(SAO_PAULO_TZ).date() + timedelta(days=day_offset)).isoformat()
-        response = self.client.get_fixtures_by_league_date(league.league_id, target_date, league.season)
+        response = _cached_call(
+            "api_football.fixtures_by_league_date",
+            180,
+            lambda: self.client.get_fixtures_by_league_date(league.league_id, target_date, league.season),
+            league.league_id,
+            target_date,
+            league.season,
+        )
         if not response.get("ok"):
             return {
                 "ok": False,
@@ -187,7 +195,12 @@ class FixtureMenuService:
         return self.build_fixture_advisor_payload(fixture["fixture_id"])
 
     def build_fixture_advisor_payload(self, fixture_id: int | str, include_players: bool = True) -> dict[str, Any]:
-        fixture_response = self.client.get_fixture_by_id(fixture_id)
+        fixture_response = _cached_call(
+            "api_football.fixture_by_id",
+            120,
+            lambda: self.client.get_fixture_by_id(fixture_id),
+            fixture_id,
+        )
         if not fixture_response.get("ok"):
             return {"error": _friendly_api_error(fixture_response.get("error"))}
 
@@ -294,9 +307,31 @@ class FixtureMenuService:
     def _build_football_context(self, fixture: dict[str, Any]) -> dict[str, Any]:
         league_id = fixture.get("league_id")
         season = fixture.get("season")
-        standings_response = self.client.get_standings(league_id, season) if league_id and season else {"ok": False}
-        home_schedule_response = self.client.get_team_next_fixtures(fixture["home_team_id"], next_games=10)
-        away_schedule_response = self.client.get_team_next_fixtures(fixture["away_team_id"], next_games=10)
+        standings_response = (
+            _cached_call(
+                "api_football.standings",
+                900,
+                lambda: self.client.get_standings(league_id, season),
+                league_id,
+                season,
+            )
+            if league_id and season
+            else {"ok": False}
+        )
+        home_schedule_response = _cached_call(
+            "api_football.team_next_fixtures",
+            300,
+            lambda: self.client.get_team_next_fixtures(fixture["home_team_id"], next_games=10),
+            fixture["home_team_id"],
+            10,
+        )
+        away_schedule_response = _cached_call(
+            "api_football.team_next_fixtures",
+            300,
+            lambda: self.client.get_team_next_fixtures(fixture["away_team_id"], next_games=10),
+            fixture["away_team_id"],
+            10,
+        )
         return self.football_context_service.build_context_summary(
             fixture=fixture,
             standings_response=standings_response,
@@ -336,8 +371,23 @@ class FixtureMenuService:
         season: int,
         side: str,
     ) -> dict[str, Any]:
-        stats_response = self.client.get_team_home_away_stats(team_id, league_id, season)
-        fixtures_response = self.client.get_team_fixtures(team_id, last=5, league_id=league_id, season=season)
+        stats_response = _cached_call(
+            "api_football.team_home_away_stats",
+            900,
+            lambda: self.client.get_team_home_away_stats(team_id, league_id, season),
+            team_id,
+            league_id,
+            season,
+        )
+        fixtures_response = _cached_call(
+            "api_football.team_fixtures_last",
+            300,
+            lambda: self.client.get_team_fixtures(team_id, last=5, league_id=league_id, season=season),
+            team_id,
+            5,
+            league_id,
+            season,
+        )
 
         recent_fixtures = _as_list(fixtures_response.get("data")) if fixtures_response.get("ok") else []
         recent_metrics = _recent_metrics_from_fixtures(recent_fixtures, team_id)
@@ -388,6 +438,11 @@ def _normalize_fixture(raw: dict[str, Any], fallback_league: LeagueConfig | None
         "home_team": home.get("name") or raw.get("home_team"),
         "away_team": away.get("name") or raw.get("away_team"),
     }
+
+
+def _cached_call(namespace: str, ttl_seconds: int, factory, *parts: Any) -> dict[str, Any]:
+    key = cache_key(namespace, *parts)
+    return default_cache.get_or_set(key, ttl_seconds, factory)
 
 
 def _format_selected_fixture_analysis(

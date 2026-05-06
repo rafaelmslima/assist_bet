@@ -87,15 +87,26 @@ def list_recent_settled_bets(db: Session, user_id: int, limit: int = 10) -> list
 def calculate_user_roi(db: Session, user_id: int) -> dict[str, float | int]:
     statement = select(Bet).where(Bet.user_id == user_id, Bet.status.in_(("won", "lost", "void")))
     bets = list(db.scalars(statement))
-    total_stake = sum(bet.stake for bet in bets if bet.status in {"won", "lost"})
+    graded_bets = [bet for bet in bets if bet.status in {"won", "lost"}]
+    won_bets = [bet for bet in bets if bet.status == "won"]
+    lost_bets = [bet for bet in bets if bet.status == "lost"]
+    void_bets = [bet for bet in bets if bet.status == "void"]
+    total_stake = sum(bet.stake for bet in graded_bets)
     profit_loss = sum(bet.profit_loss or 0 for bet in bets)
     roi = (profit_loss / total_stake) if total_stake else 0.0
+    win_rate = (len(won_bets) / len(graded_bets)) if graded_bets else 0.0
+    average_odd = (sum(bet.odd for bet in graded_bets) / len(graded_bets)) if graded_bets else 0.0
 
     return {
         "total_bets": len(bets),
+        "won_bets": len(won_bets),
+        "lost_bets": len(lost_bets),
+        "void_bets": len(void_bets),
         "total_stake": total_stake,
         "profit_loss": profit_loss,
         "roi": roi,
+        "win_rate": win_rate,
+        "average_odd": average_odd,
     }
 
 

@@ -28,7 +28,7 @@ async def button_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     if intent == UserIntent.FOOTBALL:
         clear_user_state(telegram_user_id)
         await update.message.reply_text(
-            "Futebol: escolha como você quer encontrar a melhor leitura.",
+            "Futebol: escolha como quer encontrar a melhor leitura.",
             reply_markup=football_menu_keyboard(),
         )
         return
@@ -36,7 +36,7 @@ async def button_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     if intent == UserIntent.NBA:
         clear_user_state(telegram_user_id)
         await update.message.reply_text(
-            "NBA: escolha um jogo para eu buscar props de jogadores com leitura por posição, minutos e matchup.",
+            "NBA: escolha um jogo para buscar props com leitura de minutos e matchup.",
             reply_markup=nba_menu_keyboard(),
         )
         return
@@ -77,7 +77,7 @@ async def button_message_handler(update: Update, context: ContextTypes.DEFAULT_T
     if intent == UserIntent.SETTINGS:
         clear_user_state(telegram_user_id)
         await update.message.reply_text(
-            "Configurações ainda serão implementadas. Por enquanto, use o teclado para iniciar uma análise.",
+            "Configuracoes ainda serao implementadas. Por enquanto, use /status para ver APIs, banco e cache.",
             reply_markup=main_menu_keyboard(),
         )
         return

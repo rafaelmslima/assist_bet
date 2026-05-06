@@ -539,6 +539,8 @@ def _find_candidate_odd(candidate: MarketCandidate, odds: list[dict[str, Any]]) 
         return _find_h2h_odd(odds, candidate.selection.replace("vitória do ", ""))
     if candidate.key == "over_1_5_goals":
         return _find_total_odd(odds, side="over", point=1.5)
+    if candidate.key == "home_dnb":
+        return _find_odd(odds, (candidate.selection, "draw no bet", "dnb", "empate anula"))
     return _find_odd(odds, (candidate.selection, candidate.market, candidate.key))
 
 
@@ -615,6 +617,8 @@ def _fair_odd(probability: float | None) -> float | None:
 def _confidence(score: float, risk: float, value: dict[str, Any] | None) -> str:
     if risk >= 2.0 or score < 2.0:
         return "baixa"
+    if value is None:
+        return "média" if score >= 3.0 and risk < 1.2 else "baixa"
     if value and value.get("classification") == "sem value claro":
         return "baixa"
     if score >= 3.4 and risk < 1.2:

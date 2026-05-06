@@ -32,6 +32,8 @@ def format_status_message() -> str:
     db_mode = "SQLite" if settings.database_url.startswith("sqlite") else "PostgreSQL/externo"
     api_data_mode = "real" if settings.api_football_key else "mock/parcial"
     odds_data_mode = "real" if settings.odds_api_key else "indisponivel"
+    nba_mode = "real" if settings.balldontlie_key else "mock/parcial"
+    openai_mode = "ativo" if settings.openai_api_key else "fallback local"
     cache = default_cache.stats()
     return (
         "Status operacional\n\n"
@@ -46,6 +48,11 @@ def format_status_message() -> str:
         f"Dados de odds: {odds_data_mode}\n"
         f"Odds regions: {settings.odds_api_regions}\n"
         f"Odds markets: {settings.odds_api_markets}\n\n"
+        f"NBA API: {nba_mode}\n"
+        f"OpenAI/LLM: {openai_mode}\n"
+        "Taxa analises sem odds: n/d\n"
+        "Taxa matching odds baixa: n/d\n"
+        f"Modo atual: {'ai_interpreter' if settings.openai_api_key else 'local_formatter'}\n\n"
         "Limitacoes: sem odds equivalentes, o bot nao classifica como value; com dados parciais, a confianca cai."
     )
 

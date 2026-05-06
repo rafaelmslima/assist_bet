@@ -46,6 +46,7 @@ class FootballContextService:
             team_id=fixture.get("home_team_id"),
             team_name=fixture.get("home_team") or "Mandante",
             league_id=league_id,
+            fixture_round=fixture.get("round"),
             fixture_date=fixture_date,
             standings=standings,
             schedule=_as_list(home_schedule_response.get("data") if home_schedule_response.get("ok") else None),
@@ -54,6 +55,7 @@ class FootballContextService:
             team_id=fixture.get("away_team_id"),
             team_name=fixture.get("away_team") or "Visitante",
             league_id=league_id,
+            fixture_round=fixture.get("round"),
             fixture_date=fixture_date,
             standings=standings,
             schedule=_as_list(away_schedule_response.get("data") if away_schedule_response.get("ok") else None),
@@ -74,12 +76,13 @@ class FootballContextService:
         team_id: Any,
         team_name: str,
         league_id: int | None,
+        fixture_round: Any,
         fixture_date: datetime | None,
         standings: list[dict[str, Any]],
         schedule: list[dict[str, Any]],
     ) -> dict[str, str | None]:
         calendar = _upcoming_international_summary(team_name, fixture_date, schedule)
-        table = _table_objective_summary(team_id, team_name, league_id, standings)
+        table = _table_objective_summary(team_id, team_name, league_id, standings, fixture_round)
 
         if calendar and INSUFFICIENT_CONTEXT not in table:
             return {"summary": f"{calendar} {table}", "alert": calendar}
@@ -93,6 +96,7 @@ def _table_objective_summary(
     team_name: str,
     league_id: int | None,
     standings: list[dict[str, Any]],
+    fixture_round: Any = None,
 ) -> str:
     row = _find_standing_row(team_id, team_name, standings)
     if not row:
@@ -104,7 +108,7 @@ def _table_objective_summary(
         return f"{team_name}: {INSUFFICIENT_CONTEXT}."
 
     if league_id in CUP_LEAGUE_IDS:
-        return f"{team_name}: briga por classificacao no grupo/fase."
+        return _cup_phase_objective(team_name, row, total, fixture_round)
 
     rules = DOMESTIC_RULES.get(league_id or -1)
     if not rules:
@@ -295,6 +299,39 @@ def _remaining_suffix(games_remaining: int | None) -> str:
 def _is_international_competition(name: str) -> bool:
     normalized = _compact_name(name)
     return any(_compact_name(term) in normalized for term in INTERNATIONAL_COMPETITIONS)
+
+
+def _cup_phase_objective(team_name: str, row: dict[str, Any], total: int | None, fixture_round: Any) -> str:
+    phase = _phase_from_round(fixture_round)
+    if phase is not None:
+        return f"{team_name}: {phase}"
+
+    if total and total <= 4:
+        position = _to_int(row.get("rank") or row.get("position"))
+        if position is not None:
+            if position <= 2:
+                return f"{team_name}: briga por classificacao no grupo; hoje esta em zona de classificacao."
+            return f"{team_name}: briga por classificacao no grupo; hoje esta fora da zona."
+    return f"{team_name}: fase internacional ativa, mas sem round detalhado na API."
+
+
+def _phase_from_round(value: Any) -> str | None:
+    if not value:
+        return None
+    round_name = _compact_name(str(value))
+    if "final" in round_name and "semi" not in round_name and "quarter" not in round_name:
+        return "jogo de final; decisao direta de titulo."
+    if "semi" in round_name:
+        return "briga por vaga na final (semi-final)."
+    if "quarter" in round_name or "quartas" in round_name:
+        return "briga por vaga na semi-final (quartas de final)."
+    if "round of 16" in round_name or "oitavas" in round_name:
+        return "mata-mata de oitavas; confronto eliminatorio."
+    if "playoff" in round_name or "play offs" in round_name:
+        return "fase de playoff eliminatorio."
+    if "group" in round_name or "grupo" in round_name:
+        return "fase de grupos; disputa por zona de classificacao."
+    return f"fase atual: {str(value)}."
 
 
 def _parse_date(value: Any) -> datetime | None:

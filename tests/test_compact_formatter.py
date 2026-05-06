@@ -28,11 +28,12 @@ class CompactFormatterTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Melhor aposta:", text)
+        self.assertIn("Eu iria por", text)
         self.assertIn("Contexto:", text)
+        self.assertIn("Alternativas:", text)
         self.assertIn("Arsenal: jogo de Champions League em 4 dias.", text)
         self.assertNotIn("Por que faz sentido", text)
-        self.assertLessEqual(len(text.splitlines()), 24)
+        self.assertLessEqual(len(text.splitlines()), 20)
 
     def test_formatter_keeps_context_for_player_prop_recommendation(self) -> None:
         text = format_bet_advisor_response(

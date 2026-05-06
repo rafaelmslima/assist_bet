@@ -217,3 +217,23 @@ class Bet(Base):
     settled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped[User] = relationship(back_populates="bets")
+
+
+class Recommendation(Base):
+    __tablename__ = "recommendations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    fixture_id: Mapped[str] = mapped_column(String(100), index=True)
+    sport: Mapped[str] = mapped_column(String(30), index=True)
+    market: Mapped[str] = mapped_column(String(100), index=True)
+    selection: Mapped[str] = mapped_column(String(255))
+    score: Mapped[int] = mapped_column(Integer, default=0)
+    confidence: Mapped[str] = mapped_column(String(20))
+    risk: Mapped[str] = mapped_column(String(20))
+    stake_suggestion: Mapped[str] = mapped_column(String(30))
+    odd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    edge: Mapped[float | None] = mapped_column(Float, nullable=True)
+    archetype: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    traps: Mapped[str | None] = mapped_column(Text, nullable=True)
+    final_result: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)

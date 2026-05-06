@@ -32,10 +32,11 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Melhor aposta: Over 2.5 gols", text)
-        self.assertIn("Preco e value:", text)
-        self.assertIn("Leitura: value forte.", text)
-        self.assertIn("Gestao sugerida: entrada normal", text)
+        self.assertIn("Eu iria por Over 2.5 gols", text)
+        self.assertIn("Preco: odd 1.85, justa 1.61, value forte.", text)
+        self.assertIn("Contexto:", text)
+        self.assertIn("Alternativas:", text)
+        self.assertLessEqual(len(text.splitlines()), 18)
 
     def test_response_without_odds_does_not_claim_value(self) -> None:
         text = format_bet_advisor_response(
@@ -55,8 +56,10 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Sem odds equivalentes", text)
+        self.assertIn("Obs. odds:", text)
+        self.assertIn("sem linha equivalente", text.lower())
         self.assertIn("shortlist", text.lower())
+        self.assertNotIn("Antes de entrar:", text)
         self.assertNotIn("value forte", text)
 
     def test_avoid_response_is_explicit(self) -> None:
@@ -73,8 +76,48 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Melhor aposta: evitar", text)
+        self.assertIn("Eu nao entraria pre-jogo aqui.", text)
         self.assertIn("sem entrada pre-jogo", text.lower())
+
+    def test_response_always_keeps_context_and_alternatives(self) -> None:
+        text = format_bet_advisor_response(
+            {
+                "fixture": {"home_team": "Bayern München", "away_team": "Paris Saint Germain"},
+                "main_recommendation": {
+                    "market": "Prop de jogador - finalizacoes",
+                    "selection": "H. Kane: over em finalizacoes, se a linha estiver perto de 2.5",
+                    "confidence": "media",
+                    "risk_level": "medio",
+                    "summary": "O mercado de jogo nao ficou tao claro, entao eu olharia primeiro para H. Kane em finalizacoes. A leitura vem do volume individual e do risco menor em relacao aos mercados principais.",
+                    "fair_odd": 1.82,
+                    "odds_note": "A Odds API nao retornou linha de prop equivalente para confirmar value.",
+                },
+                "context_summary": {
+                    "summary_lines": [
+                        "Bayern München: briga por vaga na final (semi-final).",
+                        "Paris Saint Germain: briga por vaga na final (semi-final).",
+                    ]
+                },
+                "alternative_recommendations": [
+                    {"market": "Total de gols", "selection": "Over 2.5 gols", "reason": "medias combinadas sao fortes para tres gols."},
+                    {"market": "Ambas marcam", "selection": "Sim", "reason": "os dois ataques tem producao minima para participar."},
+                ],
+                "avoid_markets": [{"market": "forcar vencedor pre-jogo", "reason": "leitura por time nao ficou forte."}],
+                "warnings": [
+                    "titularidade ainda precisa ser confirmada.",
+                    "sem odds de props disponiveis, nao da para confirmar value.",
+                ],
+                "final_verdict": "Eu trataria H. Kane em finalizacoes como a melhor shortlist, mas so entraria com linha e odd justas.",
+            }
+        )
+
+        self.assertIn("Contexto:", text)
+        self.assertIn("Alternativas:", text)
+        self.assertIn("Bayern München: briga por vaga na final", text)
+        self.assertIn("Over 2.5 gols", text)
+        self.assertIn("Obs. odds: sem linha equivalente para props", text)
+        self.assertNotIn("Preco e value:", text)
+        self.assertLessEqual(len(text.splitlines()), 20)
 
 
 if __name__ == "__main__":

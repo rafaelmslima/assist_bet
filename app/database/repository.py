@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import AnalysisCard, Bet, OddsSnapshot, User, utc_now
+from app.database.models import AnalysisCard, Bet, OddsSnapshot, Recommendation, User, utc_now
 from app.schemas.bet import BetCreate
 
 
@@ -230,6 +230,39 @@ def save_model(db: Session, model_data: Any) -> Any:
     db.commit()
     db.refresh(model_data)
     return model_data
+
+
+def create_recommendation(
+    db: Session,
+    *,
+    fixture_id: str,
+    sport: str,
+    market: str,
+    selection: str,
+    score: int,
+    confidence: str,
+    risk: str,
+    stake_suggestion: str,
+    odd: float | None = None,
+    edge: float | None = None,
+    archetype: str | None = None,
+    traps: str | None = None,
+) -> Recommendation:
+    rec = Recommendation(
+        fixture_id=fixture_id,
+        sport=sport,
+        market=market,
+        selection=selection,
+        score=score,
+        confidence=confidence,
+        risk=risk,
+        stake_suggestion=stake_suggestion,
+        odd=odd,
+        edge=edge,
+        archetype=archetype,
+        traps=traps,
+    )
+    return save_model(db, rec)
 
 
 def _profit_loss_for_status(stake: float, odd: float, status: str) -> float:

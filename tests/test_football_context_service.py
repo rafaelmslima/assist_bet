@@ -80,11 +80,38 @@ class FootballContextServiceTest(unittest.TestCase):
         self.assertIn("Champions League em 4 dias", context["home_context_summary"])
         self.assertNotIn("Europa League", context["away_context_summary"])
 
+    def test_champions_round_describes_semifinal(self) -> None:
+        standings_response = {
+            "ok": True,
+            "data": [
+                {
+                    "league": {
+                        "standings": [
+                            [
+                                {"rank": 1, "team": {"id": 1, "name": "Bayern München"}, "points": 12},
+                                {"rank": 2, "team": {"id": 2, "name": "Paris Saint Germain"}, "points": 10},
+                            ]
+                        ]
+                    }
+                }
+            ],
+        }
+        context = self.service.build_context_summary(
+            fixture=_fixture(home_id=1, home="Bayern München", away_id=2, away="Paris Saint Germain", league_id=2, round_name="Semi-finals"),
+            standings_response=standings_response,
+            home_schedule_response={"ok": True, "data": []},
+            away_schedule_response={"ok": True, "data": []},
+        )
 
-def _fixture(home_id: int, home: str, away_id: int, away: str, league_id: int) -> dict:
+        self.assertIn("vaga na final", context["home_context_summary"])
+        self.assertIn("vaga na final", context["away_context_summary"])
+
+
+def _fixture(home_id: int, home: str, away_id: int, away: str, league_id: int, round_name: str | None = None) -> dict:
     return {
         "fixture_date": "2026-05-01T19:00:00+00:00",
         "league_id": league_id,
+        "round": round_name,
         "home_team_id": home_id,
         "away_team_id": away_id,
         "home_team": home,

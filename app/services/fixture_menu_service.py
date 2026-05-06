@@ -291,9 +291,9 @@ class FixtureMenuService:
             "football_context": football_context,
         }
         advice = BetAdvisorService().advise_fixture_bets(fixture_data)
-        advisor_text = format_bet_advisor_response(advice)
         if not odds and odds_response.get("error"):
-            advisor_text = f"{advisor_text}\n\nObs. odds: {odds_response.get('error')}"
+            advice["odds_error"] = odds_response.get("error")
+        advisor_text = format_bet_advisor_response(advice)
         return {
             "advisor_text": advisor_text,
             "card_text": card_text,
@@ -430,6 +430,7 @@ def _normalize_fixture(raw: dict[str, Any], fallback_league: LeagueConfig | None
         "fixture_id": fixture.get("id") or raw.get("id"),
         "league_id": league.get("id") or (fallback_league.league_id if fallback_league else None),
         "league": league.get("name") or raw.get("league") or (fallback_league.label if fallback_league else None),
+        "round": league.get("round") or raw.get("round"),
         "season": league.get("season") or (fallback_league.season if fallback_league else datetime.now().year),
         "fixture_date": fixture.get("date") or raw.get("date") or raw.get("fixture_date"),
         "status": _nested_get(fixture, "status", "short") or raw.get("status"),

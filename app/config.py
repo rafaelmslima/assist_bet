@@ -37,6 +37,8 @@ class Settings:
 
     environment: str = os.getenv("ENVIRONMENT", "development")
     bot_analysis_style: str = os.getenv("BOT_ANALYSIS_STYLE", "advisor")
+    openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
+    openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
 
 settings = Settings()

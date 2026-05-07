@@ -36,6 +36,7 @@ class Settings:
     odds_api_odds_format: str = os.getenv("ODDS_API_ODDS_FORMAT", "decimal")
 
     environment: str = os.getenv("ENVIRONMENT", "development")
+    database_create_all: bool = os.getenv("DATABASE_CREATE_ALL", "").lower() in {"1", "true", "yes"}
     bot_analysis_style: str = os.getenv("BOT_ANALYSIS_STYLE", "advisor")
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")

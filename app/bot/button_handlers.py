@@ -24,9 +24,11 @@ async def button_message_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
 
     telegram_user_id = update.effective_user.id
+    selected_sport = context.user_data.get("sport_menu")
 
     if intent == UserIntent.FOOTBALL:
         clear_user_state(telegram_user_id)
+        context.user_data["sport_menu"] = "football"
         await update.message.reply_text(
             "Futebol: escolha como quer encontrar a melhor leitura.",
             reply_markup=football_menu_keyboard(),
@@ -35,6 +37,7 @@ async def button_message_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     if intent == UserIntent.NBA:
         clear_user_state(telegram_user_id)
+        context.user_data["sport_menu"] = "nba"
         await update.message.reply_text(
             "NBA: escolha um jogo para buscar props com leitura de minutos e matchup.",
             reply_markup=nba_menu_keyboard(),
@@ -66,6 +69,7 @@ async def button_message_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     if intent == UserIntent.BACK:
         clear_user_state(telegram_user_id)
+        context.user_data["sport_menu"] = None
         await update.message.reply_text("Menu principal.", reply_markup=main_menu_keyboard())
         return
 
@@ -84,11 +88,17 @@ async def button_message_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     if intent == UserIntent.TODAY_GAMES:
         clear_user_state(telegram_user_id)
+        if selected_sport == "nba":
+            await show_nba_games_menu(update, context)
+            return
         await show_leagues_menu(update, context)
         return
 
     if intent == UserIntent.TOMORROW_GAMES:
         clear_user_state(telegram_user_id)
+        if selected_sport == "nba":
+            await show_nba_tomorrow_games_menu(update, context)
+            return
         await show_tomorrow_leagues_menu(update, context)
         return
 
@@ -102,6 +112,9 @@ async def button_message_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     if intent == UserIntent.PLAYERS_OF_DAY:
         clear_user_state(telegram_user_id)
+        if selected_sport == "nba":
+            await show_nba_players_menu(update, context)
+            return
         await show_player_leagues_menu(update, context)
         return
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from app.services.ai_interpreter_service import AIInterpreterService
@@ -10,10 +11,13 @@ from app.services.football_data_service import FootballDataService
 from app.services.game_archetype_service import GameArchetypeService
 from app.services.market_scoring_service import MarketScoringService
 from app.services.nba_data_service import NbaDataService
-from app.services.odds_service import OddsService
+from app.services.odds_service import FOOTBALL_LEAGUE_TO_ODDS_SPORT, OddsService
 from app.services.trap_detection_service import TrapDetectionService
 from app.database.repository import create_recommendation
 from app.database.session import SessionLocal
+
+
+logger = logging.getLogger(__name__)
 
 
 class RecommendationService:
@@ -38,7 +42,7 @@ class RecommendationService:
         fixture_context = self._build_fixture_context(sport, fixture)
         signals = self.analysis.analyze_football(fixture_context) if sport == "football" else self.analysis.analyze_nba(fixture_context)
         context = self.context.build_football_context(fixture_context) if sport == "football" else self.context.build_nba_context(fixture_context)
-        sport_key = "soccer_epl" if sport == "football" else "basketball_nba"
+        sport_key = self._sport_key_for_fixture(sport, fixture)
         odds = self.odds.get_available_markets_for_fixture(fixture, sport_key)
         archetype = self.archetypes.classify(sport, signals, context, has_odds=bool(odds))
         scored = self.market_scoring.score_markets(sport, signals, context, odds)
@@ -95,5 +99,21 @@ class RecommendationService:
                     archetype=(rec.get("archetype") or {}).get("archetype"),
                     traps="; ".join(rec.get("traps", [])),
                 )
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "recommendation_persist_failed fixture_id=%s sport=%s error=%s",
+                fixture.get("fixture_id"),
+                rec.get("sport", "football"),
+                exc.__class__.__name__,
+            )
+
+    @staticmethod
+    def _sport_key_for_fixture(sport: str, fixture: dict[str, Any]) -> str:
+        if sport != "football":
+            return "basketball_nba"
+        league_id = fixture.get("league_id")
+        try:
+            normalized_league_id = int(league_id) if league_id is not None else None
+        except (TypeError, ValueError):
+            normalized_league_id = None
+        return FOOTBALL_LEAGUE_TO_ODDS_SPORT.get(normalized_league_id, "soccer_epl")

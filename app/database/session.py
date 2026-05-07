@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import logging
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.config import settings
 from app.database.models import Base
+
+
+logger = logging.getLogger(__name__)
 
 
 def _engine_kwargs(database_url: str) -> dict:
@@ -20,7 +24,10 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, futu
 
 
 def init_db() -> None:
-    """Create local development tables."""
+    """Create local development tables when migrations are not managing startup."""
+    if settings.environment.lower() == "production" and not settings.database_create_all:
+        logger.info("Skipping create_all in production; run Alembic migrations before startup.")
+        return
     Base.metadata.create_all(bind=engine)
 
 

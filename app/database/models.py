@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -42,6 +42,7 @@ class User(Base, TimestampMixin):
 
 class Team(Base, TimestampMixin):
     __tablename__ = "teams"
+    __table_args__ = (UniqueConstraint("sport", "external_id", name="uq_teams_sport_external_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     sport: Mapped[str] = mapped_column(String(50), index=True)
@@ -67,6 +68,7 @@ class Team(Base, TimestampMixin):
 
 class Player(Base, TimestampMixin):
     __tablename__ = "players"
+    __table_args__ = (UniqueConstraint("sport", "external_id", name="uq_players_sport_external_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     sport: Mapped[str] = mapped_column(String(50), index=True)
@@ -84,6 +86,7 @@ class Player(Base, TimestampMixin):
 
 class Fixture(Base, TimestampMixin):
     __tablename__ = "fixtures"
+    __table_args__ = (UniqueConstraint("sport", "external_id", name="uq_fixtures_sport_external_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     sport: Mapped[str] = mapped_column(String(50), index=True)

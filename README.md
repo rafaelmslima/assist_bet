@@ -51,6 +51,7 @@ Crie um `.env` a partir de `.env.example`:
 ```env
 TELEGRAM_BOT_TOKEN=seu-token-do-telegram
 DATABASE_URL=sqlite:///./sports_betting_assistant.db
+DATABASE_CREATE_ALL=false
 API_FOOTBALL_KEY=sua-chave-api-football
 BALLDONTLIE_KEY=sua-chave-balldontlie
 ODDS_API_KEY=sua-chave-the-odds-api
@@ -111,6 +112,14 @@ Se o provedor entregar `postgresql://...` ou `postgres://...`, o app converte au
 
 Para produção, recomenda-se adicionar Alembic antes de evoluir o schema.
 
+O projeto já inclui uma base de migrations com Alembic. Antes de subir o bot em produção, rode:
+
+```powershell
+alembic upgrade head
+```
+
+Em produção, `Base.metadata.create_all()` não roda por padrão quando `ENVIRONMENT=production`. Use `DATABASE_CREATE_ALL=true` apenas como escape temporário em ambiente controlado.
+
 ## Railway
 
 Arquivos incluídos:
@@ -123,17 +132,18 @@ Variáveis obrigatórias no Railway:
 
 - `TELEGRAM_BOT_TOKEN`
 - `DATABASE_URL`
+- `ENVIRONMENT=production`
 - `API_FOOTBALL_KEY`
 - `BALLDONTLIE_KEY`
 - `ODDS_API_KEY`
 
-Use um serviço PostgreSQL no Railway e configure `DATABASE_URL`.
+Use um serviço PostgreSQL no Railway, configure `DATABASE_URL` e execute `alembic upgrade head` antes de iniciar o worker.
 
 ## Testes e validação
 
 ```powershell
 python -m compileall app
-python -m unittest discover
+python -m pytest
 ```
 
 ## Roadmap
@@ -141,7 +151,6 @@ python -m unittest discover
 - MVP atual: assessor por jogo, futebol e NBA, odds e tracking de apostas.
 - Próximos passos:
   - Cache com TTL para reduzir rate limit.
-  - Alembic para migrations.
   - Testes de callbacks Telegram.
   - Match mais robusto de odds por mercado/linha.
   - Stats avançadas de jogadores e contexto de escalação.

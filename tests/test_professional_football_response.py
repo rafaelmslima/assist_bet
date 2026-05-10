@@ -142,6 +142,29 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
         self.assertIn("motivo", first_half)
         self.assertIn("riscos", first_half)
 
+    def test_response_handles_competitive_status_with_direct_language(self) -> None:
+        text = format_bet_advisor_response(
+            {
+                "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
+                "main_recommendation": {
+                    "market": "Resultado",
+                    "selection": "Arsenal DNB",
+                    "confidence": "baixa",
+                    "risk_level": "alto",
+                    "summary": "Leitura tecnica existe, mas contexto competitivo pede cautela.",
+                },
+                "context_summary": {
+                    "summary_lines": [
+                        "Arsenal: ja campeao matematicamente; objetivo principal cumprido.",
+                        "Chelsea: fora da zona, mas ainda em risco matematico de rebaixamento.",
+                    ]
+                },
+                "final_verdict": "Nao forcar entrada pre-jogo.",
+            }
+        )
+        self.assertIn("ja campeao matematicamente", text)
+        self.assertIn("ainda em risco matematico de rebaixamento", text)
+
 
 if __name__ == "__main__":
     unittest.main()

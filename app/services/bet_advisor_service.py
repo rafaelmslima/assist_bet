@@ -28,14 +28,10 @@ class BetAdvisorService:
         away = fixture_analysis.get("away_team_data") or {}
         context = fixture_analysis.get("context") or {}
         odds = _as_list(fixture_analysis.get("odds"))
-        player_advice = fixture_analysis.get("player_advice") or {}
         football_context = fixture_analysis.get("football_context") or context.get("football_context") or {}
 
         candidates = self._score_football_markets(home, away, context, odds)
         candidates = sorted(candidates, key=lambda item: item.score, reverse=True)
-        prop_response = _prop_recommendation(fixture, player_advice, candidates, odds, football_context)
-        if prop_response is not None:
-            return prop_response
 
         if not candidates or candidates[0].score < 2.0:
             return self._no_clear_bet(fixture, candidates, home, away, context)
@@ -391,77 +387,6 @@ def _score_home_team_goal(home, away, hs, away_c, context, odds):
     return MarketCandidate("home_team_goals", "Gols do time", f"{home_name} over 0.5 gols", score, risk, 1.25, reasons, risks)
 
 
-def _prop_recommendation(
-    fixture: dict[str, Any],
-    player_advice: dict[str, Any],
-    candidates: list[MarketCandidate],
-    odds: list[dict[str, Any]],
-    football_context: dict[str, Any] | None = None,
-) -> dict[str, Any] | None:
-    best = player_advice.get("best") if isinstance(player_advice, dict) else None
-    if not best:
-        return None
-
-    risk = str(best.get("risk_level") or "").lower()
-    if risk in {"alto", "high"}:
-        return None
-
-    top_game_score = candidates[0].score if candidates else 0.0
-    if top_game_score >= 2.8:
-        return None
-
-    selection = str(best.get("selection") or best.get("market") or "prop de jogador")
-    player = str(best.get("player") or "jogador")
-    warnings = list(best.get("warnings") or [])
-    if not player_advice.get("lineups_confirmed"):
-        warnings.append("titularidade ainda precisa ser confirmada.")
-    if not odds:
-        warnings.append("sem odds de props disponiveis, nao da para confirmar value.")
-
-    estimated = 0.55 if risk in {"baixo", "low"} else 0.51
-    return {
-        "fixture": fixture,
-        "main_recommendation": {
-            "market": f"Prop de jogador - {best.get('market')}",
-            "selection": f"{player}: {selection}",
-            "confidence": "media" if risk in {"medio", "médio", "baixo"} else "baixa",
-            "risk_level": "medio" if warnings else "baixo",
-            "min_acceptable_odd": None,
-            "estimated_probability": estimated,
-            "fair_odd": _fair_odd(estimated),
-            "summary": (
-                f"O mercado de jogo nao ficou tao claro, entao eu olharia primeiro para {player} em {best.get('market')}. "
-                "A leitura vem do volume individual e do risco menor em relacao aos mercados principais."
-            ),
-            "value": None,
-            "odds_available": bool(odds),
-            "odds_summary": _odds_summary(odds),
-            "odds_note": "A Odds API nao retornou linha de prop equivalente para confirmar value.",
-        },
-        "alternative_recommendations": [
-            {
-                "market": item.market,
-                "selection": item.selection,
-                "confidence": _confidence(item.score, item.risk_points, None),
-                "reason": _short_reason(item),
-            }
-            for item in candidates[:2]
-        ],
-        "avoid_markets": [
-            {
-                "market": "forcar vencedor pre-jogo",
-                "reason": "a leitura por time nao ficou forte o bastante; a prop tem caminho mais especifico.",
-            }
-        ],
-        "key_factors": list(best.get("reasons") or [])[:4],
-        "warnings": _unique(warnings)[:4],
-        "context_summary": football_context or {},
-        "final_verdict": (
-            f"Eu trataria {player} em {best.get('market')} como a melhor shortlist, mas so entraria com linha e odd justas."
-        ),
-    }
-
-
 def _add_last5_context(
     candidates: list[MarketCandidate],
     home: dict[str, Any],
@@ -637,18 +562,18 @@ def _risk_level(risk: float, warnings: list[str]) -> str:
 def _warnings_from_context(context: dict[str, Any], risks: list[str], odds: list[dict[str, Any]]) -> list[str]:
     warnings = list(risks)
     if _context_risk(context):
-        warnings.append("contexto indica possível rotação, fadiga ou informação incompleta.")
+        warnings.append("contexto competitivo indica risco de rotacao, queda de intensidade ou leitura instavel.")
     if not odds:
-        warnings.append("sem odds disponíveis, não dá para confirmar value.")
-    warnings.append("confirme escalações e desfalques antes de entrar.")
+        warnings.append("sem odds disponiveis, nao da para confirmar value.")
+    warnings.append("confirme escalacoes e desfalques antes de entrar.")
     return _unique(warnings)
 
 
 def _apply_context(score: float, risk: float, context: dict[str, Any], risks: list[str]) -> tuple[float, float]:
     if _context_risk(context):
-        score -= 0.7
-        risk += 1.0
-        risks.append("contexto/escalação ainda pode mudar a leitura.")
+        score -= 1.0
+        risk += 1.3
+        risks.append("estado competitivo sugere variacao de motivacao ou possivel rotacao.")
     return score, risk
 
 
@@ -657,26 +582,36 @@ def _apply_odd(score: float, risk: float, odd: float | None, min_odd: float, rea
         return score, risk
     if odd >= min_odd:
         score += 0.4
-        reasons.append(f"odd {odd:.2f} não parece espremida para esta leitura.")
+        reasons.append(f"odd {odd:.2f} nao parece espremida para esta leitura.")
     else:
         score -= 0.8
         risk += 0.8
-        risks.append(f"odd {odd:.2f} está baixa; pode já ter precificado a vantagem.")
+        risks.append(f"odd {odd:.2f} esta baixa; pode ja ter precificado a vantagem.")
     return score, risk
 
 
 def _short_reason(candidate: MarketCandidate) -> str:
-    return candidate.reasons[0] if candidate.reasons else "é o mercado com melhor equilíbrio entre leitura e risco."
+    return candidate.reasons[0] if candidate.reasons else "e o mercado com melhor equilibrio entre leitura e risco."
 
 
 def _context_risk(context: dict[str, Any]) -> bool:
+    football_context = context.get("football_context") if isinstance(context.get("football_context"), dict) else {}
+    alerts = football_context.get("context_alerts") if isinstance(football_context, dict) else []
+    states = football_context.get("competitive_states") if isinstance(football_context, dict) else {}
+    if isinstance(states, dict):
+        critical_states = {"champion_locked", "continental_locked", "relegated_locked"}
+        for state in states.values():
+            if str(state or "").lower() in critical_states:
+                return True
+
     values = [
         str(context.get("rotation_risk") or "").lower(),
         str(context.get("fatigue_risk") or "").lower(),
         str(context.get("injuries") or "").lower(),
         str(context.get("alerts") or "").lower(),
+        " ".join(str(item).lower() for item in alerts) if isinstance(alerts, list) else str(alerts or "").lower(),
     ]
-    return any(word in " ".join(values) for word in ("alto", "médio", "medio", "rotação", "desfalque"))
+    return any(word in " ".join(values) for word in ("alto", "medio", "rotacao", "desfalque", "alta:"))
 
 
 def _find_odd(odds: list[dict[str, Any]], terms: tuple[str, ...]) -> float | None:
@@ -770,3 +705,6 @@ def _unique(items: list[str]) -> list[str]:
 
 def advise_fixture_bets(fixture_analysis: dict[str, Any]) -> dict[str, Any]:
     return BetAdvisorService().advise_fixture_bets(fixture_analysis)
+
+
+

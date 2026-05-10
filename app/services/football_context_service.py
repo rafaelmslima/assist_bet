@@ -25,6 +25,17 @@ DOMESTIC_RULES: dict[int, dict[str, int | str]] = {
     88: {"champions_to": 2, "continental_to": 8, "relegation_count": 3, "continental_label": "vaga europeia/playoffs"},
     71: {"champions_to": 6, "continental_to": 12, "relegation_count": 4, "continental_label": "Sul-Americana"},
 }
+COMPETITIVE_STATES = {
+    "champion_locked",
+    "title_still_at_risk",
+    "title_race",
+    "continental_locked",
+    "continental_at_risk",
+    "continental_race",
+    "relegated_locked",
+    "relegation_at_risk",
+    "safe_midtable",
+}
 
 
 class FootballContextService:
@@ -68,6 +79,10 @@ class FootballContextService:
             "away_context_summary": away_summary["summary"],
             "context_alerts": alerts,
             "summary_lines": lines,
+            "competitive_states": {
+                "home": home_summary.get("competitive_state"),
+                "away": away_summary.get("competitive_state"),
+            },
         }
 
     def _team_context(
@@ -82,13 +97,16 @@ class FootballContextService:
         schedule: list[dict[str, Any]],
     ) -> dict[str, str | None]:
         calendar = _upcoming_international_summary(team_name, fixture_date, schedule)
-        table = _table_objective_summary(team_id, team_name, league_id, standings, fixture_round)
+        table_payload = _table_objective_summary(team_id, team_name, league_id, standings, fixture_round)
+        table = table_payload["summary"]
+        alert = table_payload.get("alert")
 
         if calendar and INSUFFICIENT_CONTEXT not in table:
-            return {"summary": f"{calendar} {table}", "alert": calendar}
+            merged_alert = " | ".join(item for item in (calendar, alert) if item)
+            return {"summary": f"{calendar} {table}", "alert": merged_alert, "competitive_state": table_payload.get("state")}
         if calendar:
-            return {"summary": calendar, "alert": calendar}
-        return {"summary": table, "alert": None}
+            return {"summary": calendar, "alert": " | ".join(item for item in (calendar, alert) if item), "competitive_state": table_payload.get("state")}
+        return {"summary": table, "alert": alert, "competitive_state": table_payload.get("state")}
 
 
 def _table_objective_summary(
@@ -97,22 +115,22 @@ def _table_objective_summary(
     league_id: int | None,
     standings: list[dict[str, Any]],
     fixture_round: Any = None,
-) -> str:
+) -> dict[str, str | None]:
     row = _find_standing_row(team_id, team_name, standings)
     if not row:
-        return f"{team_name}: {INSUFFICIENT_CONTEXT}."
+        return {"summary": f"{team_name}: {INSUFFICIENT_CONTEXT}.", "state": None, "alert": None}
 
     position = _to_int(row.get("rank") or row.get("position"))
     total = _standing_group_size(row, standings)
     if not position:
-        return f"{team_name}: {INSUFFICIENT_CONTEXT}."
+        return {"summary": f"{team_name}: {INSUFFICIENT_CONTEXT}.", "state": None, "alert": None}
 
     if league_id in CUP_LEAGUE_IDS:
-        return _cup_phase_objective(team_name, row, total, fixture_round)
+        return {"summary": _cup_phase_objective(team_name, row, total, fixture_round), "state": None, "alert": None}
 
     rules = DOMESTIC_RULES.get(league_id or -1)
     if not rules:
-        return f"{team_name}: {INSUFFICIENT_CONTEXT}."
+        return {"summary": f"{team_name}: {INSUFFICIENT_CONTEXT}.", "state": None, "alert": None}
 
     return _domestic_table_objective(team_name, league_id, row, standings, rules, total)
 
@@ -149,58 +167,137 @@ def _domestic_table_objective(
     standings: list[dict[str, Any]],
     rules: dict[str, int | str],
     total: int | None,
-) -> str:
+) -> dict[str, str | None]:
     position = _to_int(row.get("rank") or row.get("position"))
     points = _row_points(row)
     played = _row_played(row) or _max_played(standings)
     games_remaining = _games_remaining(total, played)
     if position is None or total is None:
-        return f"{team_name}: {INSUFFICIENT_CONTEXT}."
+        return {"summary": f"{team_name}: {INSUFFICIENT_CONTEXT}.", "state": None, "alert": None}
 
     champions_to = int(rules["champions_to"])
     continental_to = int(rules["continental_to"])
     relegation_count = int(rules["relegation_count"])
     continental_label = str(rules["continental_label"])
     top_label = "Libertadores" if league_id == 71 else "Champions"
-    target_label = top_label if position <= champions_to else continental_label
+    standings_by_rank = sorted(
+        [item for item in standings if _to_int(item.get("rank") or item.get("position")) is not None],
+        key=lambda item: _to_int(item.get("rank") or item.get("position")) or 999,
+    )
+    status = _competitive_status(
+        row=row,
+        standings=standings_by_rank,
+        position=position,
+        points=points,
+        games_remaining=games_remaining,
+        total=total,
+        champions_to=champions_to,
+        continental_to=continental_to,
+        relegation_count=relegation_count,
+    )
 
-    if position <= continental_to:
+    state = status["state"]
+    if state == "champion_locked":
+        return {
+            "summary": f"{team_name}: ja campeao matematicamente; objetivo principal cumprido.",
+            "state": state,
+            "alert": f"ALTA: {team_name} ja campeao; risco de queda de intensidade/rotacao.",
+        }
+    if state == "title_still_at_risk":
+        return {"summary": f"{team_name}: lidera, mas ainda pode perder o titulo matematicamente.", "state": state, "alert": None}
+    if state == "title_race":
+        return {"summary": f"{team_name}: ainda briga matematicamente pelo titulo.", "state": state, "alert": None}
+    if state == "continental_locked":
         label = top_label if position <= champions_to else continental_label
-        suffix = _remaining_suffix(games_remaining)
-        return f"{team_name}: esta em zona de {label}, mas ainda precisa sustentar{suffix}."
+        return {
+            "summary": f"{team_name}: ja garantiu vaga em {label} matematicamente.",
+            "state": state,
+            "alert": f"ALTA: {team_name} com vaga garantida; pode reduzir intensidade.",
+        }
+    if state == "continental_at_risk":
+        label = top_label if position <= champions_to else continental_label
+        return {"summary": f"{team_name}: esta em zona de {label}, mas ainda pode perder a vaga.", "state": state, "alert": None}
+    if state == "continental_race":
+        return {"summary": f"{team_name}: ainda tem chance matematica real de {continental_label}.", "state": state, "alert": None}
+    if state == "relegated_locked":
+        return {
+            "summary": f"{team_name}: ja rebaixado matematicamente.",
+            "state": state,
+            "alert": f"ALTA: {team_name} ja rebaixado; motivacao e intensidade podem oscilar.",
+        }
+    if state == "relegation_at_risk":
+        relegation_start = total - relegation_count + 1
+        if position >= relegation_start:
+            return {"summary": f"{team_name}: esta na zona e ainda briga para nao cair.", "state": state, "alert": None}
+        return {"summary": f"{team_name}: fora da zona, mas ainda em risco matematico de rebaixamento.", "state": state, "alert": None}
+
+    return {"summary": f"{team_name}: meio de tabela seguro, sem risco matematico relevante.", "state": "safe_midtable", "alert": None}
+
+
+def _competitive_status(
+    *,
+    row: dict[str, Any],
+    standings: list[dict[str, Any]],
+    position: int,
+    points: int | None,
+    games_remaining: int | None,
+    total: int,
+    champions_to: int,
+    continental_to: int,
+    relegation_count: int,
+) -> dict[str, str]:
+    if points is None or games_remaining is None:
+        return {"state": "safe_midtable"}
 
     relegation_start = total - relegation_count + 1
-    relegation_gap = _distance_to_relegation(row, standings, relegation_start)
+    leader = standings[0] if standings else None
+    leader_points = _row_points(leader or {})
+    first_outside_continental = _row_by_rank(standings, continental_to + 1)
+    first_safe = _row_by_rank(standings, relegation_start - 1)
+
+    # Title states
+    if position == 1:
+        strongest_chaser_max = _max_points_among(standings[1:], games_remaining)
+        if strongest_chaser_max < points:
+            return {"state": "champion_locked"}
+        return {"state": "title_still_at_risk"}
+    if leader_points is not None and _max_points_for_row(row, games_remaining) >= leader_points:
+        return {"state": "title_race"}
+
+    # Continental states
+    if position <= continental_to:
+        outside_max = _max_points_for_row(first_outside_continental, games_remaining)
+        if outside_max < points:
+            return {"state": "continental_locked"}
+        return {"state": "continental_at_risk"}
+    continental_cut = _row_by_rank(standings, continental_to)
+    continental_cut_points = _row_points(continental_cut or {})
+    if continental_cut_points is not None and _max_points_for_row(row, games_remaining) >= continental_cut_points:
+        return {"state": "continental_race"}
+
+    # Relegation states
     if position >= relegation_start:
-        return f"{team_name}: pressionado por rebaixamento; esta na zona."
-    if relegation_gap is not None and relegation_gap <= 6:
-        return f"{team_name}: pressionado por rebaixamento; esta a {relegation_gap} pontos da zona."
+        safe_points = _row_points(first_safe or {})
+        if safe_points is not None and _max_points_for_row(row, games_remaining) < safe_points:
+            return {"state": "relegated_locked"}
+        return {"state": "relegation_at_risk"}
+    if _max_points_among(standings[relegation_start - 1 :], games_remaining) >= points:
+        return {"state": "relegation_at_risk"}
+    return {"state": "safe_midtable"}
 
-    if points is None:
-        return f"{team_name}: meio de tabela, sem briga continental clara (contexto parcial)."
 
-    continental_gap = _distance_to_continental(row, standings, continental_to)
-    if continental_gap is None:
-        return f"{team_name}: meio de tabela, sem briga continental clara (contexto parcial)."
+def _max_points_for_row(row: dict[str, Any] | None, games_remaining: int) -> int:
+    if not isinstance(row, dict):
+        return -1
+    row_points = _row_points(row)
+    if row_points is None:
+        return -1
+    return row_points + games_remaining * 3
 
-    if games_remaining is None:
-        if continental_gap <= 6:
-            return f"{team_name}: briga por {continental_label}; esta a {continental_gap} pontos da zona (contexto parcial)."
-        return f"{team_name}: meio de tabela, sem briga continental clara (contexto parcial)."
 
-    direct_threshold = min(6, games_remaining * 1.5)
-    math_threshold = games_remaining * 3
-    if continental_gap <= direct_threshold:
-        return (
-            f"{team_name}: briga diretamente por {continental_label}; "
-            f"esta a {continental_gap} pontos do {continental_to}o com {games_remaining} jogos restantes."
-        )
-    if continental_gap <= math_threshold:
-        return (
-            f"{team_name}: chance matematica de {continental_label}, mas cenario distante; "
-            f"esta a {continental_gap} pontos com {games_remaining} jogos."
-        )
-    return f"{team_name}: meio de tabela, sem briga continental clara."
+def _max_points_among(rows: list[dict[str, Any]], games_remaining: int) -> int:
+    values = [_max_points_for_row(row, games_remaining) for row in rows]
+    return max(values) if values else -1
 
 
 def _flatten_standings(data: Any) -> list[dict[str, Any]]:

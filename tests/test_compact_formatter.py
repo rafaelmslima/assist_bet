@@ -28,7 +28,7 @@ class CompactFormatterTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Eu iria por", text)
+        self.assertIn("Melhor entrada:", text)
         self.assertIn("Contexto:", text)
         self.assertIn("Alternativas:", text)
         self.assertIn("Arsenal: jogo de Champions League em 4 dias.", text)
@@ -56,6 +56,27 @@ class CompactFormatterTest(unittest.TestCase):
 
         self.assertIn("Arsenal: jogo de Champions League em 4 dias.", text)
         self.assertIn("Chelsea: meio de tabela.", text)
+
+    def test_formatter_shows_competitive_status_objectively(self) -> None:
+        text = format_bet_advisor_response(
+            {
+                "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
+                "main_recommendation": {
+                    "market": "Total de gols",
+                    "selection": "Over 1.5 gols",
+                    "summary": "Leitura de gols segue valida com odd justa.",
+                },
+                "context_summary": {
+                    "summary_lines": [
+                        "Arsenal: ja garantiu vaga em Champions matematicamente.",
+                        "Chelsea: lidera, mas ainda pode perder o titulo matematicamente.",
+                    ]
+                },
+                "final_verdict": "Entrada com cautela.",
+            }
+        )
+        self.assertIn("ja garantiu vaga", text)
+        self.assertIn("ainda pode perder o titulo", text)
 
 
 if __name__ == "__main__":

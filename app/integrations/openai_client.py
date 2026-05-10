@@ -21,6 +21,54 @@ class OpenAIClient:
     def is_enabled(self) -> bool:
         return bool(self.api_key)
 
+    def analyze_football_dossier(self, dossier: dict[str, Any]) -> str | None:
+        if not self.api_key:
+            return None
+        system_prompt = (
+            "Voce e um analista profissional de futebol para apostas esportivas. "
+            "Sua tarefa e decidir a melhor acao para um jogo usando apenas o JSON recebido.\n\n"
+            "Regras obrigatorias:\n"
+            "- Nao invente estatisticas, odds, escalacoes, desfalques, classificacao ou motivacao.\n"
+            "- Se odds nao estiverem disponiveis, nao diga que existe value.\n"
+            "- Se dados forem fracos, escalações incertas ou contexto instavel, recomende sem entrada pre-jogo ou esperar live.\n"
+            "- Priorize estes mercados quando fizer sentido: escanteios, over 0.5 gol casa, over 0.5 gol fora, over 1.5 gols, over 2.5 gols, vitoria do favorito.\n"
+            "- Sempre considere classificacao, calendario internacional, desfalques, lineups e contexto competitivo.\n"
+            "- Nao prometa lucro e nao use linguagem de aposta garantida.\n\n"
+            "Responda em portugues do Brasil, direto e curto, no formato exato:\n"
+            "[Time A] x [Time B]\n\n"
+            "Leitura: [2 ou 3 frases sobre contexto, classificacao, momento e risco.]\n\n"
+            "Melhor entrada:\n"
+            "[mercado ou sem entrada pre-jogo] - [motivo curto]\n\n"
+            "Alternativas:\n"
+            "1. [mercado/esperar live] - [motivo]\n"
+            "2. [mercado/evitar] - [motivo]\n\n"
+            "Evitaria:\n"
+            "[mercado ou situacao]\n\n"
+            "Confianca: [baixa/media/alta]"
+        )
+        user_prompt = f"Analise este dossie do jogo e decida o que fazer:\n{json.dumps(dossier, ensure_ascii=False)}"
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "temperature": 0.25,
+        }
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                resp = client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                    json=payload,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data["choices"][0]["message"]["content"]
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("OpenAI football analysis fallback acionado: %s", exc)
+            return None
+
     def explain_recommendation(self, recommendation: dict[str, Any]) -> str | None:
         if not self.api_key:
             return None

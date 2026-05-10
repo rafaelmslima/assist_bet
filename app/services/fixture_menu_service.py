@@ -8,13 +8,13 @@ import re
 import unicodedata
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from app.bot.formatters import format_bet_advisor_response
 from app.integrations.api_football_client import ApiFootballClient
 from app.services.cache_service import cache_key, default_cache
 from app.services.analysis_service import AnalysisService
-from app.services.bet_advisor_service import BetAdvisorService
 from app.services.card_service import generate_pre_match_card
+from app.services.football_ai_analysis_service import FootballAIAnalysisService
 from app.services.football_context_service import FootballContextService
+from app.services.football_match_dossier_service import FootballMatchDossierService
 from app.services.football_player_service import FootballPlayerService
 from app.services.odds_service import OddsService
 from app.services.player_advisor_service import PlayerAdvisorService, format_fixture_player_advice
@@ -63,6 +63,8 @@ class FixtureMenuService:
         self.player_service = FootballPlayerService(self.client)
         self.player_advisor = PlayerAdvisorService()
         self.football_context_service = FootballContextService()
+        self.dossier_service = FootballMatchDossierService(self.client, self.football_context_service)
+        self.football_ai_analysis = FootballAIAnalysisService()
 
     def get_supported_leagues(self) -> tuple[LeagueConfig, ...]:
         return SUPPORTED_LEAGUES
@@ -264,6 +266,7 @@ class FixtureMenuService:
         )
         odds = odds_response.get("data") if odds_response.get("ok") else []
         player_advice: dict[str, Any] = {}
+        player_context = None
         player_advice_text = "Jogadores interessantes\n\nUse o botao de jogadores para buscar stats individuais deste jogo."
         injuries_text = "Desfalques\n\nUse o botao de desfalques para buscar dados atualizados deste jogo."
         predictions: dict[str, Any] = {}
@@ -288,23 +291,25 @@ class FixtureMenuService:
                 "lineups_confirmed": lineups_confirmed,
             }
         )
-        fixture_data = {
-            "fixture": fixture,
-            "home_team_data": home_team_data,
-            "away_team_data": away_team_data,
-            "context": context,
-            "matchup_analysis": matchup,
-            "odds": odds,
-            "props": player_advice.get("recommendations") or [],
-            "player_advice": player_advice,
-            "predictions": predictions,
-            "lineups_confirmed": lineups_confirmed,
-            "football_context": football_context,
-        }
-        advice = BetAdvisorService().advise_fixture_bets(fixture_data)
-        if not odds and odds_response.get("error"):
-            advice["odds_error"] = odds_response.get("error")
-        advisor_text = format_bet_advisor_response(advice)
+        odds_error = odds_response.get("error") if not odds else None
+        dossier = self.dossier_service.build_dossier(
+            fixture=fixture,
+            home_team_data=home_team_data,
+            away_team_data=away_team_data,
+            football_context=football_context,
+            odds=odds,
+            player_context=player_context,
+            odds_error=odds_error,
+        )
+        ai_result = self.football_ai_analysis.analyze(dossier)
+        advisor_text = ai_result["advisor_text"]
+        advice = _advice_from_ai_dossier(
+            fixture=fixture,
+            dossier=dossier,
+            text=advisor_text,
+            mode=ai_result["mode"],
+            odds_error=odds_error,
+        )
         return {
             "advisor_text": advisor_text,
             "card_text": card_text,
@@ -313,6 +318,8 @@ class FixtureMenuService:
             "fixture": fixture,
             "advice": advice,
             "player_advice": player_advice,
+            "dossier": dossier,
+            "analysis_mode": ai_result["mode"],
         }
 
     def _build_football_context(self, fixture: dict[str, Any]) -> dict[str, Any]:
@@ -450,6 +457,92 @@ def _normalize_fixture(raw: dict[str, Any], fallback_league: LeagueConfig | None
         "home_team": home.get("name") or raw.get("home_team"),
         "away_team": away.get("name") or raw.get("away_team"),
     }
+
+
+def _advice_from_ai_dossier(
+    *,
+    fixture: dict[str, Any],
+    dossier: dict[str, Any],
+    text: str,
+    mode: str,
+    odds_error: str | None,
+) -> dict[str, Any]:
+    quality = dossier.get("data_quality") or {}
+    candidates = dossier.get("market_candidates") or []
+    best_candidate = _first_non_wait_candidate(candidates)
+    confidence = _confidence_from_text(text) or ("baixa" if quality.get("level") == "fraco" else "media")
+    return {
+        "fixture": fixture,
+        "main_recommendation": {
+            "market": best_candidate.get("key") or "ai_analysis",
+            "selection": _extract_best_entry(text) or best_candidate.get("label") or "sem entrada pre-jogo",
+            "confidence": confidence,
+            "risk_level": "alto" if confidence == "baixa" else "medio",
+            "summary": _extract_reading(text),
+            "value": None,
+            "odds_available": bool((dossier.get("odds") or {}).get("available")),
+        },
+        "alternative_recommendations": _candidate_alternatives(candidates),
+        "avoid_markets": [{"market": _extract_avoid(text) or "entrada sem confirmacao", "reason": "decisao final gerada pela IA sobre o dossie."}],
+        "context_summary": dossier.get("competitive_context") or {},
+        "warnings": quality.get("notes") or [],
+        "final_verdict": text,
+        "analysis_mode": mode,
+        "odds_error": odds_error,
+        "data_quality": quality,
+    }
+
+
+def _first_non_wait_candidate(candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    for item in candidates:
+        if item.get("key") != "wait_live_or_no_bet":
+            return item
+    return candidates[0] if candidates else {}
+
+
+def _candidate_alternatives(candidates: list[dict[str, Any]]) -> list[dict[str, str]]:
+    rows = []
+    for item in candidates:
+        if item.get("key") == "wait_live_or_no_bet":
+            continue
+        rows.append({"market": str(item.get("key") or ""), "selection": str(item.get("label") or ""), "reason": str((item.get("evidence") or [""])[0])})
+        if len(rows) >= 3:
+            break
+    return rows
+
+
+def _extract_reading(text: str) -> str:
+    for line in str(text).splitlines():
+        if line.strip().lower().startswith("leitura:"):
+            return line.split(":", 1)[1].strip()
+    return str(text).splitlines()[0] if str(text).splitlines() else ""
+
+
+def _extract_best_entry(text: str) -> str | None:
+    lines = [line.strip() for line in str(text).splitlines()]
+    for index, line in enumerate(lines):
+        if line.lower().startswith("melhor entrada") and index + 1 < len(lines):
+            return lines[index + 1]
+    return None
+
+
+def _extract_avoid(text: str) -> str | None:
+    lines = [line.strip() for line in str(text).splitlines()]
+    for index, line in enumerate(lines):
+        if line.lower().startswith("evitaria") and index + 1 < len(lines):
+            return lines[index + 1]
+    return None
+
+
+def _confidence_from_text(text: str) -> str | None:
+    normalized = _compact_name(text)
+    if "confianca alta" in normalized or "confiança alta" in normalized:
+        return "alta"
+    if "confianca media" in normalized or "confiança média" in normalized or "confianca medio" in normalized:
+        return "media"
+    if "confianca baixa" in normalized or "confiança baixa" in normalized:
+        return "baixa"
+    return None
 
 
 def _cached_call(namespace: str, ttl_seconds: int, factory, *parts: Any) -> dict[str, Any]:

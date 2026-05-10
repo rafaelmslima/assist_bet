@@ -22,17 +22,82 @@ class FootballResponseService:
         home = fixture.get("home_team") or fixture.get("home_team_name") or "Mandante"
         away = fixture.get("away_team") or fixture.get("away_team_name") or "Visitante"
 
-        lines = [f"{home} x {away}", "", self._read_paragraph(main, advice), "", "Melhor aposta:"]
-        lines.append(self._best_bet_line(main, advice))
-        lines.append("")
-        lines.append("Boas alternativas:")
-        lines.extend(self._alternatives(advice.get("alternative_recommendations")))
-        lines.append("")
+        lines = [
+            f"{home} x {away}",
+            "",
+            self._general_read_line(main, advice),
+            f"Melhor entrada: {self._entry_label(main)}",
+            f"Motivo: {self._reason_line(main, advice)}",
+            f"Riscos: {self._risk_line(main, advice)}",
+            self._price_line(main, advice),
+        ]
+
+        context = self._context_lines(advice.get("context_summary"))
+        if context:
+            lines.append("Contexto:")
+            lines.extend(context[:2])
+
+        alternatives = self._alternatives(advice.get("alternative_recommendations"), limit=2)
+        lines.append("Alternativas:")
+        lines.extend(alternatives)
         lines.append("Evitaria:")
         lines.append(self._avoid_line(advice.get("avoid_markets")) or "forcar entrada pre-jogo sem vantagem clara.")
+        verdict = _compact(_clean(advice.get("final_verdict")), 120)
+        if verdict:
+            lines.append(f"Veredito: {verdict}")
 
-        compact = [line for line in lines if line is not None]
-        return "\n".join(compact[:12])
+        return "\n".join(line for line in lines if line is not None)
+
+    def _general_read_line(self, main: dict[str, Any], advice: dict[str, Any]) -> str:
+        if _is_avoid(main):
+            return "Leitura geral: pre-jogo sem vantagem clara para entrar."
+        summary = _clean(main.get("summary")) or _clean(advice.get("final_verdict"))
+        if summary:
+            return f"Leitura geral: {_compact(summary, 120)}"
+        return "Leitura geral: ha uma direcao, mas a entrada depende de preco e contexto."
+
+    def _entry_label(self, main: dict[str, Any]) -> str:
+        if _is_avoid(main):
+            return "sem entrada pre-jogo"
+        selection = str(main.get("selection") or "entrada coletiva")
+        market = str(main.get("market") or "")
+        if market and market.lower() not in selection.lower():
+            return f"{selection} ({market})"
+        return selection
+
+    def _reason_line(self, main: dict[str, Any], advice: dict[str, Any]) -> str:
+        reasons = main.get("reasons")
+        if isinstance(reasons, list) and reasons:
+            return _compact(_clean(reasons[0]), 110)
+        return _compact(_clean(main.get("summary")) or _clean(advice.get("final_verdict")) or "sem edge claro no momento.", 110)
+
+    def _risk_line(self, main: dict[str, Any], advice: dict[str, Any]) -> str:
+        warnings = main.get("warnings") or advice.get("warnings") or []
+        if isinstance(warnings, list) and warnings:
+            return _compact(_clean(warnings[0]), 110)
+        risk = main.get("risk_level") or main.get("risk")
+        confidence = main.get("confidence")
+        if risk or confidence:
+            return f"risco {risk or 'medio'}, confianca {confidence or 'media'}."
+        return "confirme escalacoes, desfalques e odds antes de entrar."
+
+    def _price_line(self, main: dict[str, Any], advice: dict[str, Any]) -> str:
+        value = main.get("value")
+        if isinstance(value, dict):
+            odd = _float_or_none(value.get("odd"))
+            fair = _float_or_none(value.get("fair_odd") or main.get("fair_odd"))
+            classification = value.get("classification") or "value indefinido"
+            if odd and fair:
+                return f"Preco: odd {odd:.2f}, justa {fair:.2f}, {classification}."
+
+        market = _norm(main.get("market"))
+        odds_note = _clean(main.get("odds_note"))
+        warnings = " ".join(str(item) for item in (advice.get("warnings") or []))
+        if "prop" in market and ("sem odds" in _norm(warnings) or "linha de prop" in _norm(odds_note) or "props" in _norm(odds_note)):
+            return "Preco/value: sem linha equivalente para props."
+        if odds_note:
+            return f"Preco/value: {_compact(odds_note, 100)}"
+        return "Preco/value: sem linha equivalente para confirmar value."
 
     def _read_paragraph(self, main: dict[str, Any], advice: dict[str, Any]) -> str:
         intro = self._opening_line(main)
@@ -62,10 +127,10 @@ class FootballResponseService:
             return f"{selection_label} - {reason} {odds_note}".strip()
         return f"{selection_label} - {reason}".strip()
 
-    def _alternatives(self, alternatives: Any) -> list[str]:
+    def _alternatives(self, alternatives: Any, limit: int = 3) -> list[str]:
         rows = []
         alt_list = [item for item in (alternatives or []) if isinstance(item, dict)]
-        for idx in range(3):
+        for idx in range(limit):
             if idx < len(alt_list):
                 item = alt_list[idx]
                 sel = str(item.get("selection") or item.get("market") or "alternativa")
@@ -93,6 +158,12 @@ class FootballResponseService:
         if not cleaned:
             return ""
         return _compact(" ".join(cleaned[:2]), 130)
+
+    def _context_lines(self, context_summary: Any) -> list[str]:
+        if not isinstance(context_summary, dict):
+            return []
+        lines = context_summary.get("summary_lines") or []
+        return [_clean(line) for line in lines if _clean(line)]
 
     def _odds_note(self, main: dict[str, Any], advice: dict[str, Any]) -> str:
         value = main.get("value")

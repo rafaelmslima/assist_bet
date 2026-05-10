@@ -32,11 +32,12 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Eu iria por Over 2.5 gols", text)
+        self.assertIn("Leitura geral:", text)
+        self.assertIn("Melhor entrada: Over 2.5 gols (Total de gols)", text)
         self.assertIn("Preco: odd 1.85, justa 1.61, value forte.", text)
         self.assertIn("Contexto:", text)
         self.assertIn("Alternativas:", text)
-        self.assertLessEqual(len(text.splitlines()), 18)
+        self.assertLessEqual(len(text.splitlines()), 20)
 
     def test_response_without_odds_does_not_claim_value(self) -> None:
         text = format_bet_advisor_response(
@@ -56,7 +57,7 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Obs. odds:", text)
+        self.assertIn("Preco/value:", text)
         self.assertIn("sem linha equivalente", text.lower())
         self.assertIn("shortlist", text.lower())
         self.assertNotIn("Antes de entrar:", text)
@@ -76,7 +77,7 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Eu nao entraria pre-jogo aqui.", text)
+        self.assertIn("Leitura geral: pre-jogo sem vantagem clara para entrar.", text)
         self.assertIn("sem entrada pre-jogo", text.lower())
 
     def test_response_always_keeps_context_and_alternatives(self) -> None:
@@ -115,9 +116,31 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
         self.assertIn("Alternativas:", text)
         self.assertIn("Bayern München: briga por vaga na final", text)
         self.assertIn("Over 2.5 gols", text)
-        self.assertIn("Obs. odds: sem linha equivalente para props", text)
+        self.assertIn("Preco/value: sem linha equivalente para props", text)
         self.assertNotIn("Preco e value:", text)
-        self.assertLessEqual(len(text.splitlines()), 20)
+        self.assertLessEqual(len(text.splitlines()), 22)
+
+    def test_response_keeps_compact_structure_with_verdict_first_half(self) -> None:
+        text = format_bet_advisor_response(
+            {
+                "fixture": {"home_team": "Inter", "away_team": "Milan"},
+                "main_recommendation": {
+                    "market": "Ambas marcam",
+                    "selection": "Sim",
+                    "confidence": "media",
+                    "risk_level": "medio",
+                    "summary": "Os dois ataques produzem, mas ha risco por oscilacao no segundo tempo.",
+                },
+                "context_summary": {"summary_lines": ["Derbi com pressao alta e ritmo intenso."]},
+                "final_verdict": "Entrada possivel apenas com odd justa.",
+            }
+        )
+
+        first_half = "\n".join(text.splitlines()[:7]).lower()
+        self.assertIn("leitura geral", first_half)
+        self.assertIn("melhor entrada", first_half)
+        self.assertIn("motivo", first_half)
+        self.assertIn("riscos", first_half)
 
 
 if __name__ == "__main__":

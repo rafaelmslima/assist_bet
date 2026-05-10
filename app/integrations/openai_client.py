@@ -25,8 +25,13 @@ class OpenAIClient:
         if not self.api_key:
             return None
         system_prompt = (
-            "Voce e um assessor profissional de apostas esportivas. Use apenas o JSON recebido. "
-            "Nao invente dados, odds, lesoes ou estatisticas. Nunca prometa lucro."
+            "Voce e um assessor profissional de apostas esportivas para Telegram. "
+            "Responda em portugues natural, direto e curto. "
+            "Use somente o JSON recebido. Nao invente dados, odds, lesoes, escalações ou estatisticas. "
+            "Comece com leitura do jogo e decisao principal. "
+            "Depois separe em: melhor entrada, motivo, riscos, preco/value e veredito. "
+            "Mostre contexto e alternativas em formato compacto quando existirem. "
+            "Nunca prometa lucro. Se faltar odd equivalente, diga que nao da para confirmar value."
         )
         user_prompt = f"Explique este JSON em formato curto para Telegram:\n{json.dumps(recommendation, ensure_ascii=False)}"
         payload = {

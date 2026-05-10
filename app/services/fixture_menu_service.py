@@ -103,6 +103,17 @@ class FixtureMenuService:
         fixtures = [fixture for fixture in fixtures if fixture.get("fixture_id")]
         return {"ok": True, "error": None, "fixtures": fixtures, "league": league, "date": target_date}
 
+    def get_leagues_with_fixtures(self, day_offset: int = 0) -> list[LeagueConfig]:
+        leagues_with_games: list[LeagueConfig] = []
+        for league in self.get_supported_leagues():
+            result = self.get_fixtures_for_day(league.key, day_offset=day_offset)
+            if not result.get("ok"):
+                continue
+            fixtures = result.get("fixtures") or []
+            if fixtures:
+                leagues_with_games.append(league)
+        return leagues_with_games
+
     def get_best_games_today(self, limit: int = 3) -> str:
         candidates: list[dict[str, Any]] = []
         errors = []

@@ -34,10 +34,11 @@ class FootballResponseService:
         lines = [
             f"{home} x {away}",
             "",
-            self._decision_line(main),
-            self._risk_line(main),
-            f"A ideia: {self._main_reason(main, advice)}",
-            "",
+            self._opening_line(main),
+            f"Melhor entrada: {self._decision_line(main)}",
+            f"Motivo: {self._main_reason(main, advice)}",
+            f"Riscos: {self._risk_line(main)}",
+            f"Preco/value: {self._odds_observation(main, advice)}",
             "Contexto:",
             *self._context_lines(advice.get("context_summary")),
             "Alternativas:",
@@ -52,19 +53,26 @@ class FootballResponseService:
         if warnings:
             lines.append(f"Antes de entrar: {warnings}")
 
-        odds_note = self._odds_observation(main, advice)
-        if odds_note:
-            lines.append(f"Obs. odds: {odds_note}")
-
         lines.append(f"Veredito: {self._verdict(advice, main)}")
         return "\n".join(str(line) for line in lines if line is not None)
+
+    def _opening_line(self, main: dict[str, Any]) -> str:
+        confidence = _normalize_label(main.get("confidence") or "baixa")
+        risk = _normalize_label(main.get("risk_level") or "medio")
+        if _is_avoid(main):
+            return "Leitura geral: pre-jogo sem vantagem clara para entrar."
+        if confidence == "alta" and risk == "baixo":
+            return "Leitura geral: jogo com sinal mais limpo para explorar pre-jogo."
+        if risk == "alto":
+            return "Leitura geral: existe caminho de entrada, mas com variancia alta."
+        return "Leitura geral: ha uma ideia de entrada, mas pedindo filtro de preco."
 
     def _decision_line(self, main: dict[str, Any]) -> str:
         market = str(main.get("market") or "mercado")
         selection = str(main.get("selection") or "evitar")
         if _is_avoid(main):
-            return "Eu nao entraria pre-jogo aqui. Sem entrada pre-jogo."
-        return f"Eu iria por {selection} ({market})."
+            return "sem entrada pre-jogo."
+        return f"{selection} ({market})"
 
     def _risk_line(self, main: dict[str, Any]) -> str:
         confidence = _normalize_label(main.get("confidence") or "baixa")
@@ -72,8 +80,8 @@ class FootballResponseService:
         management = _stake_phrase(main)
         price = _price_phrase(main)
         if price:
-            return f"Confianca {confidence}, risco {risk}. {management} {price}"
-        return f"Confianca {confidence}, risco {risk}. {management}"
+            return f"confianca {confidence}, risco {risk}. {management} {price}"
+        return f"confianca {confidence}, risco {risk}. {management}"
 
     def _main_reason(self, main: dict[str, Any], advice: dict[str, Any]) -> str:
         summary = _clean_sentence(main.get("summary"))
@@ -146,7 +154,7 @@ class FootballResponseService:
             return _short_odds_note(error, main)
         if _has_missing_odds_warning(advice.get("warnings")):
             return "sem linha equivalente para confirmar value nessa entrada."
-        return None
+        return "sem odd equivalente, trato como leitura tecnica e nao como value."
 
     def _verdict(self, advice: dict[str, Any], main: dict[str, Any]) -> str:
         if _is_avoid(main):

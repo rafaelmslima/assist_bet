@@ -30,7 +30,10 @@ async def show_leagues_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         "Escolha uma liga para ver os jogos de hoje.\n\n"
         "Depois, selecione um jogo para gerar a analise principal."
     )
-    keyboard = _build_league_keyboard(service, prefix=LEAGUE_PREFIX)
+    keyboard = _build_league_keyboard(service, prefix=LEAGUE_PREFIX, day_offset=0)
+    if keyboard is None:
+        await _render_menu(update, "Nao encontrei jogos nas ligas suportadas para hoje.", None)
+        return
     await _render_menu(update, text, keyboard)
 
 
@@ -41,7 +44,10 @@ async def show_tomorrow_leagues_menu(update: Update, context: ContextTypes.DEFAU
         "Escolha uma liga para ver os jogos de amanhã.\n\n"
         "Depois, selecione um jogo para gerar a analise principal."
     )
-    keyboard = _build_league_keyboard(service, prefix=TOMORROW_LEAGUE_PREFIX)
+    keyboard = _build_league_keyboard(service, prefix=TOMORROW_LEAGUE_PREFIX, day_offset=1)
+    if keyboard is None:
+        await _render_menu(update, "Nao encontrei jogos nas ligas suportadas para amanha.", None)
+        return
     await _render_menu(update, text, keyboard)
 
 
@@ -52,7 +58,10 @@ async def show_player_leagues_menu(update: Update, context: ContextTypes.DEFAULT
         "Escolha uma liga para ver os jogos de hoje.\n\n"
         "Depois, selecione um jogo para buscar jogadores interessantes com stats reais."
     )
-    keyboard = _build_league_keyboard(service, prefix=PLAYER_LEAGUE_PREFIX)
+    keyboard = _build_league_keyboard(service, prefix=PLAYER_LEAGUE_PREFIX, day_offset=0)
+    if keyboard is None:
+        await _render_menu(update, "Nao encontrei jogos nas ligas suportadas para hoje.", None)
+        return
     await _render_menu(update, text, keyboard)
 
 
@@ -125,7 +134,7 @@ async def fixture_callback_handler(update: Update, context: ContextTypes.DEFAULT
         return
 
 
-async def _render_menu(update: Update, text: str, keyboard: InlineKeyboardMarkup) -> None:
+async def _render_menu(update: Update, text: str, keyboard: InlineKeyboardMarkup | None) -> None:
     if update.callback_query is not None and update.callback_query.message is not None:
         await _safe_edit_text(update.callback_query.message, text, reply_markup=keyboard)
         return
@@ -315,9 +324,15 @@ async def _show_saved_fixture_list(update: Update, context: ContextTypes.DEFAULT
     await _show_league_fixtures(update, context, league_key, mode=mode, day_offset=day_offset)
 
 
-def _build_league_keyboard(service: FixtureMenuService, prefix: str) -> InlineKeyboardMarkup:
+def _build_league_keyboard(
+    service: FixtureMenuService,
+    prefix: str,
+    day_offset: int,
+) -> InlineKeyboardMarkup | None:
     rows = []
-    leagues = service.get_supported_leagues()
+    leagues = service.get_leagues_with_fixtures(day_offset=day_offset)
+    if not leagues:
+        return None
     for index in range(0, len(leagues), 2):
         row = [
             InlineKeyboardButton(league.label, callback_data=f"{prefix}{league.key}")

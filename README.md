@@ -52,6 +52,9 @@ Crie um `.env` a partir de `.env.example`:
 TELEGRAM_BOT_TOKEN=seu-token-do-telegram
 DATABASE_URL=sqlite:///./sports_betting_assistant.db
 DATABASE_CREATE_ALL=false
+DATABASE_MIGRATE_ON_STARTUP=false
+OPENAI_API_KEY=sua-chave-openai
+OPENAI_MODEL=gpt-4o-mini
 API_FOOTBALL_KEY=sua-chave-api-football
 BALLDONTLIE_KEY=sua-chave-balldontlie
 ODDS_API_KEY=sua-chave-the-odds-api
@@ -95,6 +98,7 @@ Comandos úteis:
 ## Integrações externas
 
 - API-Football: jogos, times, estatísticas, escalações, jogadores, lesões e previsões quando o plano permitir.
+- OpenAI: analise probabilistica pre-jogo do dossie de futebol. Sem `OPENAI_API_KEY`, o bot usa fallback local curto e nao inventa percentuais finais.
 - balldontlie: jogos, times, jogadores e stats da NBA.
 - The Odds API: odds pré-jogo e mercados disponíveis.
 
@@ -118,6 +122,8 @@ O projeto já inclui uma base de migrations com Alembic. Antes de subir o bot em
 alembic upgrade head
 ```
 
+Em producao (`ENVIRONMENT=production`), o app tambem executa `alembic upgrade head` na inicializacao por padrao. Para desativar, defina `DATABASE_MIGRATE_ON_STARTUP=false` e rode a migration por fora.
+
 Em produção, `Base.metadata.create_all()` não roda por padrão quando `ENVIRONMENT=production`. Use `DATABASE_CREATE_ALL=true` apenas como escape temporário em ambiente controlado.
 
 ## Railway
@@ -133,6 +139,8 @@ Variáveis obrigatórias no Railway:
 - `TELEGRAM_BOT_TOKEN`
 - `DATABASE_URL`
 - `ENVIRONMENT=production`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL=gpt-4o-mini`
 - `API_FOOTBALL_KEY`
 - `BALLDONTLIE_KEY`
 - `ODDS_API_KEY`

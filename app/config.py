@@ -21,6 +21,17 @@ def _database_url_from_env() -> str:
     return raw_url
 
 
+def _truthy_env(name: str) -> bool:
+    return os.getenv(name, "").lower() in {"1", "true", "yes"}
+
+
+def _migrate_on_startup_from_env() -> bool:
+    raw_value = os.getenv("DATABASE_MIGRATE_ON_STARTUP")
+    if raw_value is not None:
+        return raw_value.lower() in {"1", "true", "yes"}
+    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+
+
 @dataclass(frozen=True)
 class Settings:
     telegram_bot_token: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -36,10 +47,15 @@ class Settings:
     odds_api_odds_format: str = os.getenv("ODDS_API_ODDS_FORMAT", "decimal")
 
     environment: str = os.getenv("ENVIRONMENT", "development")
-    database_create_all: bool = os.getenv("DATABASE_CREATE_ALL", "").lower() in {"1", "true", "yes"}
+    database_create_all: bool = _truthy_env("DATABASE_CREATE_ALL")
+    database_migrate_on_startup: bool = _migrate_on_startup_from_env()
     bot_analysis_style: str = os.getenv("BOT_ANALYSIS_STYLE", "advisor")
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment.lower() == "production"
 
 
 settings = Settings()

@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Generator
 import logging
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -29,6 +32,18 @@ def init_db() -> None:
         logger.info("Skipping create_all in production; run Alembic migrations before startup.")
         return
     Base.metadata.create_all(bind=engine)
+
+
+def run_migrations() -> None:
+    """Apply Alembic migrations before the bot starts."""
+    project_root = Path(__file__).resolve().parents[2]
+    alembic_ini = project_root / "alembic.ini"
+    if not alembic_ini.exists():
+        raise RuntimeError(f"Alembic config not found at {alembic_ini}")
+
+    logger.info("Running database migrations with Alembic")
+    config = Config(str(alembic_ini))
+    command.upgrade(config, "head")
 
 
 def get_db() -> Generator[Session, None, None]:

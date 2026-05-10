@@ -12,7 +12,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from app.bot.commands import register_commands
 from app.config import settings
-from app.database.session import init_db
+from app.database.session import init_db, run_migrations
 
 
 logging.basicConfig(
@@ -38,6 +38,8 @@ def create_application() -> Application:
 
 def main() -> None:
     """Application entry point."""
+    if settings.database_migrate_on_startup:
+        run_migrations()
     init_db()
     application = create_application()
 

@@ -15,8 +15,9 @@ MARKET_CANDIDATES = (
     "over_1_5_goals",
     "over_2_5_goals",
     "favorite_win",
-    "wait_live_or_no_bet",
+    "no_pre_match_bet",
 )
+RECENT_CORNER_SAMPLE = 3
 
 
 class FootballMatchDossierService:
@@ -57,6 +58,7 @@ class FootballMatchDossierService:
             lineups=lineups,
             injuries=injuries,
         )
+        probability_targets = _build_probability_targets(markets)
 
         quality_notes = self._quality_notes(
             home_team_data=home_team_data,
@@ -93,11 +95,14 @@ class FootballMatchDossierService:
             },
             "corners_context": corners,
             "market_candidates": markets,
+            "probability_targets": probability_targets,
             "analysis_rules": {
-                "ai_must_choose_from_or_reject": list(MARKET_CANDIDATES),
+                "ai_must_estimate": list(MARKET_CANDIDATES[:-1]),
+                "ai_may_recommend": list(MARKET_CANDIDATES),
                 "do_not_invent": ["odds", "lineups", "injuries", "standings", "statistics"],
                 "no_value_without_odd": True,
-                "fallback_when_weak": "sem entrada pre-jogo / esperar live",
+                "primary_task": "estimar probabilidades pre-jogo por mercado antes de sugerir qualquer entrada",
+                "fallback_when_weak": "sem entrada pre-jogo",
             },
             "data_quality": {
                 "level": _quality_level(quality_notes),
@@ -155,7 +160,12 @@ class FootballMatchDossierService:
         response = _cached_call(
             "api_football.dossier_team_recent_fixtures",
             300,
-            lambda: self.client.get_team_fixtures(int(team_id), last=5, league_id=league_id, season=season),
+            lambda: self.client.get_team_fixtures(
+                int(team_id),
+                last=RECENT_CORNER_SAMPLE,
+                league_id=league_id,
+                season=season,
+            ),
             team_id,
             league_id,
             season,
@@ -166,7 +176,7 @@ class FootballMatchDossierService:
         corner_against: list[float] = []
         notes: list[str] = []
 
-        for raw in fixtures[:5]:
+        for raw in fixtures[:RECENT_CORNER_SAMPLE]:
             fixture_id = _nested_get(raw, "fixture", "id") or raw.get("fixture_id")
             if not fixture_id:
                 continue
@@ -263,10 +273,10 @@ class FootballMatchDossierService:
                 "available_odd": favorite.get("odd"),
             },
             {
-                "key": "wait_live_or_no_bet",
-                "label": "Esperar live / sem entrada pre-jogo",
+                "key": "no_pre_match_bet",
+                "label": "Sem entrada pre-jogo",
                 "signal": _wait_signal(risk_flags, total_signal, odds),
-                "evidence": ["opcao obrigatoria quando dados, odds ou escalações nao sustentam entrada"],
+                "evidence": ["opcao obrigatoria quando dados, odds ou escalacoes nao sustentam probabilidade/value"],
                 "risk_flags": risk_flags,
                 "available_odd": None,
             },
@@ -420,6 +430,61 @@ def _summarize_odds(odds: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 }
             )
     return rows
+
+
+def _build_probability_targets(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    targets: list[dict[str, Any]] = []
+    for item in candidates:
+        key = str(item.get("key") or "")
+        if key == "no_pre_match_bet":
+            continue
+        base_probability = _base_probability_from_signal(item.get("signal"))
+        odd = _to_float(item.get("available_odd"))
+        implied_probability = round(1 / odd, 4) if odd and odd > 1 else None
+        fair_odd = round(1 / base_probability, 2) if base_probability and base_probability > 0 else None
+        edge_hint = (
+            round(base_probability - implied_probability, 4)
+            if base_probability is not None and implied_probability is not None
+            else None
+        )
+        targets.append(
+            {
+                "key": key,
+                "market": item.get("label"),
+                "base_probability_hint": base_probability,
+                "base_fair_odd_hint": fair_odd,
+                "available_odd": odd,
+                "implied_probability": implied_probability,
+                "edge_hint": edge_hint,
+                "confidence_hint": _confidence_hint(item.get("signal"), item.get("risk_flags") or []),
+                "sample_and_metrics": {
+                    "signal": item.get("signal"),
+                    "evidence": item.get("evidence") or [],
+                    "risk_flags": item.get("risk_flags") or [],
+                },
+                "ai_instruction": "estime a probabilidade final pre-jogo deste mercado; use dados insuficientes se a amostra nao sustentar percentual.",
+            }
+        )
+    return targets
+
+
+def _base_probability_from_signal(signal: Any) -> float | None:
+    normalized = _norm(signal)
+    if normalized == "alto":
+        return 0.68
+    if normalized in {"medio", "médio"}:
+        return 0.56
+    if normalized == "baixo":
+        return 0.43
+    return None
+
+
+def _confidence_hint(signal: Any, risk_flags: list[str]) -> str:
+    if signal in (None, "", "indisponivel") or len(risk_flags) >= 3:
+        return "baixa"
+    if str(signal).lower() == "alto" and len(risk_flags) <= 1:
+        return "media"
+    return "baixa" if len(risk_flags) >= 2 else "media"
 
 
 def _favorite_from_odds_or_stats(

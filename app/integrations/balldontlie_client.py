@@ -117,6 +117,8 @@ class BalldontlieClient:
 
     def _get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if not self.api_key:
+            if settings.is_production:
+                return self._error("BALLDONTLIE_KEY nao configurada em producao.", endpoint, params)
             return self._mock_response(endpoint, params)
 
         headers = {"Authorization": self.api_key}

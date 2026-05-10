@@ -495,7 +495,7 @@ def _advice_from_ai_dossier(
 
 def _first_non_wait_candidate(candidates: list[dict[str, Any]]) -> dict[str, Any]:
     for item in candidates:
-        if item.get("key") != "wait_live_or_no_bet":
+        if item.get("key") not in {"wait_live_or_no_bet", "no_pre_match_bet"}:
             return item
     return candidates[0] if candidates else {}
 
@@ -503,7 +503,7 @@ def _first_non_wait_candidate(candidates: list[dict[str, Any]]) -> dict[str, Any
 def _candidate_alternatives(candidates: list[dict[str, Any]]) -> list[dict[str, str]]:
     rows = []
     for item in candidates:
-        if item.get("key") == "wait_live_or_no_bet":
+        if item.get("key") in {"wait_live_or_no_bet", "no_pre_match_bet"}:
             continue
         rows.append({"market": str(item.get("key") or ""), "selection": str(item.get("label") or ""), "reason": str((item.get("evidence") or [""])[0])})
         if len(rows) >= 3:
@@ -521,7 +521,7 @@ def _extract_reading(text: str) -> str:
 def _extract_best_entry(text: str) -> str | None:
     lines = [line.strip() for line in str(text).splitlines()]
     for index, line in enumerate(lines):
-        if line.lower().startswith("melhor entrada") and index + 1 < len(lines):
+        if line.lower().startswith(("melhor entrada", "possivel entrada", "possível entrada")) and index + 1 < len(lines):
             return lines[index + 1]
     return None
 

@@ -188,6 +188,8 @@ class ApiFootballClient:
 
     def _get(self, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         if not self.api_key:
+            if settings.is_production:
+                return self._error("API_FOOTBALL_KEY nao configurada em producao.", endpoint, params)
             return self._mock_response(endpoint, params)
 
         headers = self._headers()

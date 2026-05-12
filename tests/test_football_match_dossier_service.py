@@ -152,10 +152,10 @@ def test_ai_fallback_returns_script_and_market_ideas_without_price_language():
     assert result["mode"] == "football_ai_fallback"
     assert "O jogo tende" in result["advisor_text"]
     assert "Se o jogo abrir cedo" in result["advisor_text"]
-    assert "Como ideias de mercado" in result["advisor_text"]
-    assert "projeção de 8 a 10 escanteios" in result["advisor_text"]
+    assert "Ideias de mercado" in result["advisor_text"]
+    assert "Projeção: 8 a 10 escanteios" in result["advisor_text"]
     assert "media combinada recente" in result["advisor_text"]
-    assert "A confiança fica" in result["advisor_text"]
+    assert "Confiança" in result["advisor_text"]
     assert "Ideia geral:" not in result["advisor_text"]
     assert "Como deve ocorrer:" not in result["advisor_text"]
     assert "value" not in result["advisor_text"].lower()
@@ -168,11 +168,11 @@ def test_ai_structured_response_formats_script_before_betting_ideas():
 
     assert result["mode"] == "football_ai"
     text = result["advisor_text"]
-    assert text.index("Arsenal deve propor") < text.index("Como ideias de mercado")
+    assert text.index("Arsenal deve propor") < text.index("Ideias de mercado")
     assert "Se o jogo abrir cedo" in text
     assert "Ideias de apostas:" not in text
     assert "linha de escanteios" in text
-    assert "projeção de 8 a 10 escanteios" in text
+    assert "Projeção: 8 a 10 escanteios" in text
     assert "volume lateral" in text
     assert "vencedor seco" in text
 
@@ -188,5 +188,5 @@ def test_ai_invalid_structured_response_uses_safe_fallback():
     )
 
     assert result["mode"] == "football_ai_fallback"
-    assert "A leitura aqui" in result["advisor_text"]
-    assert "Como ideia" in result["advisor_text"]
+    assert "Leitura do jogo" in result["advisor_text"]
+    assert "Ideias de mercado" in result["advisor_text"]

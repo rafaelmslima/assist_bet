@@ -95,28 +95,28 @@ def _parse_ai_analysis(raw_response: str | None) -> FootballAIAnalysis | None:
 
 
 def _format_analysis(analysis: FootballAIAnalysis) -> str:
-    lines = [
+    blocks = [
         analysis.fixture_label,
-        "",
-        _opening_paragraph(analysis),
-        "",
-        _script_paragraph(analysis),
-        "",
-        _context_paragraph(analysis),
-        "",
-        _market_paragraph(analysis),
+        _section("Leitura do jogo", _opening_paragraph(analysis)),
+        _section("Roteiro provável", _script_paragraph(analysis)),
+        _section("Fatores que pesam", _context_block(analysis)),
+        _section("Ideias de mercado", _market_block(analysis)),
     ]
     confidence_note = _confidence_note(analysis)
     if confidence_note:
-        lines.extend(["", confidence_note])
-    return "\n".join(line for line in lines if line)
+        blocks.append(_section("Confiança", confidence_note))
+    return "\n\n".join(block for block in blocks if block)
+
+
+def _section(title: str, body: str) -> str:
+    if not body:
+        return ""
+    return f"{title}\n{body}"
 
 
 def _opening_paragraph(analysis: FootballAIAnalysis) -> str:
     idea = _sentence(analysis.general_idea)
-    if idea.lower().startswith(("a leitura", "o jogo", "este jogo", "essa partida")):
-        return idea
-    return f"A leitura aqui é que {idea if idea else 'os dados ainda não deixam o jogo totalmente claro.'}"
+    return _capitalize_first(idea) or "Os dados ainda não deixam o jogo totalmente claro."
 
 
 def _script_paragraph(analysis: FootballAIAnalysis) -> str:
@@ -126,47 +126,44 @@ def _script_paragraph(analysis: FootballAIAnalysis) -> str:
     early = _sentence(script.if_early_goal)
     level = _sentence(script.if_level_at_halftime)
 
-    parts = [first]
+    lines = [first]
     if middle:
-        parts.append(middle)
+        lines.append(middle)
     if early or level:
-        scenario = []
+        lines.append("")
         if early:
-            scenario.append(f"Se o jogo abrir cedo, {early[0].lower() + early[1:]}")
+            lines.append(f"Se o jogo abrir cedo: {early}")
         if level:
-            scenario.append(f"se chegar empatado ao intervalo, {level[0].lower() + level[1:]}")
-        parts.append(" ".join(scenario))
-    return " ".join(parts)
+            lines.append(f"Se chegar empatado ao intervalo: {level}")
+    return "\n".join(lines)
 
 
-def _context_paragraph(analysis: FootballAIAnalysis) -> str:
+def _context_block(analysis: FootballAIAnalysis) -> str:
     matchup = _best_matchup_text(analysis)
     context = _sentence(analysis.motivation_context)
     form = _sentence(analysis.recent_form_read)
     risk = _first_text(analysis.key_risks)
 
-    parts = []
+    lines = []
     if matchup:
-        parts.append(f"O ponto de atenção mais interessante é {matchup[0].lower() + matchup[1:]}")
+        lines.append(f"- Matchup: {matchup}")
     if context:
-        parts.append(context)
+        lines.append(f"- Contexto: {context}")
     if form:
-        parts.append(form)
+        lines.append(f"- Forma: {form}")
     if risk:
-        parts.append(f"Ainda assim, o risco principal é {risk[0].lower() + risk[1:]}")
-    return " ".join(parts) or "O ponto de atenção é que os dados ainda não mostram um encaixe forte o bastante para exagerar na convicção."
+        lines.append(f"- Risco principal: {_sentence(risk)}")
+    return "\n".join(lines) or "Os dados ainda não mostram um encaixe forte o bastante para exagerar na convicção."
 
 
-def _market_paragraph(analysis: FootballAIAnalysis) -> str:
-    ideas = _market_ideas_text(analysis)
+def _market_block(analysis: FootballAIAnalysis) -> str:
+    lines = _market_idea_lines(analysis)
     avoid = _avoid_text(analysis)
-    if ideas and avoid:
-        return f"Como ideias de mercado, eu olharia primeiro para {ideas}. Evitaria {avoid}."
-    if ideas:
-        return f"Como ideia de mercado, eu olharia primeiro para {ideas}, sem tratar isso como certeza."
     if avoid:
-        return f"Eu não forçaria uma entrada clara aqui. Evitaria {avoid}."
-    return "Como ideia de mercado, eu trataria esse jogo mais como observação do que como entrada pré-jogo."
+        lines.append(f"- Evitaria: {_sentence(avoid)}")
+    if not lines:
+        lines.append("Eu trataria esse jogo mais como observação do que como entrada pré-jogo.")
+    return "\n".join(lines)
 
 
 def _confidence_note(analysis: FootballAIAnalysis) -> str:
@@ -174,11 +171,11 @@ def _confidence_note(analysis: FootballAIAnalysis) -> str:
     checklist = _first_text(analysis.checklist_before_bet)
     if analysis.confidence.level == "verde" and not checklist:
         return ""
-    confidence = f"A confiança fica {analysis.confidence.level}"
+    confidence = f"{analysis.confidence.level.capitalize()}."
     if reason:
-        confidence += f" porque {reason[0].lower() + reason[1:]}"
+        confidence += f" {_capitalize_first(reason)}"
     if checklist:
-        confidence += f" Antes de apostar, eu confirmaria {checklist[0].lower() + checklist[1:]}."
+        confidence += f" Antes de apostar, eu confirmaria {_strip_confirm_prefix(checklist)}."
     return confidence
 
 
@@ -186,41 +183,46 @@ def _best_matchup_text(analysis: FootballAIAnalysis) -> str:
     for item in analysis.tactical_matchups:
         title = _clean_text(item.title)
         reading = _sentence(item.reading)
-        if title and reading:
+        if title and reading and not _title_repeats_fixture(title, analysis.fixture_label):
             return f"{title}: {reading}"
         if reading:
             return reading
     return ""
 
 
-def _market_ideas_text(analysis: FootballAIAnalysis) -> str:
+def _market_idea_lines(analysis: FootballAIAnalysis) -> list[str]:
     if not analysis.betting_ideas:
-        return ""
-    labels = []
+        return []
+    lines = []
     for item in analysis.betting_ideas[:3]:
-        idea = _clean_text(item.idea) or _clean_text(item.market)
+        market = _clean_text(item.market)
+        idea = _clean_text(item.idea) or market
         reason = _clean_text(item.reason)
         projection = _projection_text(item)
-        if idea and projection and reason:
-            labels.append(f"{idea}, com {projection} ({reason})")
-        elif idea and projection:
-            labels.append(f"{idea}, com {projection}")
+        label = market.capitalize() if market else "Mercado"
+        if idea and projection:
+            line = f"- {label}: {_sentence(idea)} {_sentence(projection)}"
         elif idea and reason:
-            labels.append(f"{idea} ({reason})")
+            line = f"- {label}: {_sentence(idea)}"
         elif idea:
-            labels.append(idea)
-    return _natural_join(labels)
+            line = f"- {label}: {_sentence(idea)}"
+        else:
+            continue
+        if reason:
+            line += f" {_sentence(reason)}"
+        lines.append(line)
+    return lines
 
 
 def _projection_text(item: Any) -> str:
     projection = _clean_text(getattr(item, "projection", ""))
     projection_analysis = _clean_text(getattr(item, "projection_analysis", ""))
     if projection and projection_analysis:
-        return f"projeção de {projection}: {projection_analysis[0].lower() + projection_analysis[1:]}"
+        return f"Projeção: {projection}. {projection_analysis}"
     if projection:
-        return f"projeção de {projection}"
+        return f"Projeção: {projection}"
     if _is_quantitative_prop(getattr(item, "market", ""), getattr(item, "idea", "")):
-        return "sem número confiável nos dados atuais; eu não transformaria isso em prop antes de ter uma linha melhor"
+        return "Sem número confiável nos dados atuais; eu não transformaria isso em prop antes de ter uma linha melhor"
     return ""
 
 
@@ -250,7 +252,7 @@ def _avoid_text(analysis: FootballAIAnalysis) -> str:
     market = _clean_text(item.market)
     reason = _clean_text(item.reason)
     if market and reason:
-        return f"{market}, porque {reason[0].lower() + reason[1:]}"
+        return f"{market}, porque {_sentence(reason[0].lower() + reason[1:])}"
     return market
 
 
@@ -263,6 +265,25 @@ def _natural_join(items: list[str]) -> str:
     if len(cleaned) == 2:
         return f"{cleaned[0]} ou {cleaned[1]}"
     return f"{', '.join(cleaned[:-1])} ou {cleaned[-1]}"
+
+
+def _title_repeats_fixture(title: str, fixture_label: str) -> bool:
+    normalized_title = _normalize_name(title)
+    normalized_fixture = _normalize_name(fixture_label)
+    return bool(normalized_title and normalized_fixture and normalized_title == normalized_fixture)
+
+
+def _strip_confirm_prefix(value: str) -> str:
+    text = _clean_text(value)
+    lowered = text.lower()
+    for prefix in ("confirmar ", "conferir ", "checar ", "verificar "):
+        if lowered.startswith(prefix):
+            return text[len(prefix):]
+    return text
+
+
+def _normalize_name(value: str) -> str:
+    return " ".join(value.lower().replace(" x ", " vs ").split())
 
 
 def _first_text(items: list[str]) -> str:
@@ -284,6 +305,13 @@ def _sentence(value: Any) -> str:
 
 def _clean_text(value: Any) -> str:
     return " ".join(str(value or "").strip().split())
+
+
+def _capitalize_first(value: str) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    return text[0].upper() + text[1:]
 
 
 def _local_general_idea(home: str, away: str, home_team: dict[str, Any], away_team: dict[str, Any]) -> str:

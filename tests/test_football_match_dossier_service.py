@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 
@@ -22,14 +22,8 @@ class FakeClient:
         return {
             "ok": True,
             "data": [
-                {
-                    "team": {"id": team_id},
-                    "statistics": [{"type": "Corner Kicks", "value": 6}],
-                },
-                {
-                    "team": {"id": opponent_id},
-                    "statistics": [{"type": "Corner Kicks", "value": 4}],
-                },
+                {"team": {"id": team_id}, "statistics": [{"type": "Corner Kicks", "value": 6}]},
+                {"team": {"id": opponent_id}, "statistics": [{"type": "Corner Kicks", "value": 4}]},
             ],
         }
 
@@ -44,75 +38,33 @@ class StructuredOpenAIClient:
         return json.dumps(
             {
                 "fixture_label": "Arsenal x Chelsea",
-                "probabilities": [
-                    {
-                        "market_key": "over_1_5_goals",
-                        "label": "Over 1.5 gols",
-                        "probability_percent": 72,
-                        "confidence": "media",
-                        "rationale": "boa soma ofensiva",
-                        "data_status": "estimado",
-                    },
-                    {
-                        "market_key": "over_2_5_goals",
-                        "label": "Over 2.5 gols",
-                        "probability_percent": 49,
-                        "confidence": "baixa",
-                        "rationale": "risco de controle",
-                        "data_status": "estimado",
-                    },
-                    {
-                        "market_key": "home_over_0_5_goals",
-                        "label": "Gol do mandante",
-                        "probability_percent": 78,
-                        "confidence": "media",
-                        "rationale": "mandante cria bem",
-                        "data_status": "estimado",
-                    },
-                    {
-                        "market_key": "away_over_0_5_goals",
-                        "label": "Gol do visitante",
-                        "probability_percent": 55,
-                        "confidence": "media",
-                        "rationale": "visitante tem volume suficiente",
-                        "data_status": "estimado",
-                    },
-                    {
-                        "market_key": "favorite_win",
-                        "label": "Vitoria do favorito",
-                        "probability_percent": 46,
-                        "confidence": "baixa",
-                        "rationale": "favorito com preco curto",
-                        "data_status": "estimado",
-                    },
-                    {
-                        "market_key": "corners",
-                        "label": "Escanteios",
-                        "probability_percent": None,
-                        "confidence": "baixa",
-                        "rationale": "amostra fraca",
-                        "data_status": "dados_insuficientes",
-                    },
-                ],
-                "match_reading": (
-                    "Arsenal chega melhor em casa, mas o contexto ainda tem risco de rotacao. "
-                    "Chelsea tem ataque para incomodar, embora a confianca geral nao seja alta."
-                ),
-                "possible_entry": {
-                    "market_key": "over_1_5_goals",
-                    "label": "Over 1.5 gols",
-                    "min_acceptable_odd": 1.45,
-                    "has_confirmed_value": True,
-                    "reason": "probabilidade estimada acima do preco minimo",
+                "general_idea": "Arsenal deve propor mais, mas Chelsea tem transicao para incomodar.",
+                "expected_script": {
+                    "start": "Arsenal pressionando e tentando empurrar o Chelsea.",
+                    "middle": "Chelsea deve alternar bloco medio e contra-ataque.",
+                    "if_early_goal": "O jogo fica mais aberto e favorece mercados de gols.",
+                    "if_level_at_halftime": "A cautela cresce e o banco passa a pesar mais.",
                 },
-                "avoid": "Vitoria seca do favorito com odd espremida.",
+                "tactical_matchups": [
+                    {"title": "Mandante por dentro", "reading": "Arsenal tem melhor sinal ofensivo em casa."}
+                ],
+                "motivation_context": "Arsenal briga por titulo; Chelsea tem calendario pesado.",
+                "recent_form_read": "A forma do Arsenal parece mais confiavel que a do Chelsea.",
+                "key_risks": ["escalações ainda nao confirmadas"],
+                "betting_ideas": [
+                    {"market": "gols", "idea": "Over 1.5 gols", "confidence": "media", "reason": "roteiro favorece volume ofensivo."}
+                ],
+                "avoid": [{"market": "vencedor seco", "reason": "risco de transicao visitante."}],
+                "confidence": {"level": "amarela", "reason": "boa leitura, mas falta escalação."},
+                "checklist_before_bet": ["confirmar titulares"],
+                "data_quality_notes": ["escalações ainda nao confirmadas"],
             }
         )
 
 
 class InvalidOpenAIClient:
     def analyze_football_dossier(self, dossier):
-        return '{"fixture_label": "Arsenal x Chelsea", "probabilities": []}'
+        return '{"fixture_label": "Arsenal x Chelsea", "general_idea": ""}'
 
 
 def _fixture():
@@ -148,7 +100,7 @@ def _team(team_id, name, side):
     }
 
 
-def test_dossier_contains_context_and_required_markets():
+def test_dossier_contains_context_and_qualitative_market_targets():
     service = FootballMatchDossierService(client=FakeClient())
     dossier = service.build_dossier(
         fixture=_fixture(),
@@ -162,79 +114,53 @@ def test_dossier_contains_context_and_required_markets():
             "context_alerts": ["Chelsea: jogo de Champions League em 4 dias."],
             "competitive_states": {"home": "title_race", "away": "continental_at_risk"},
         },
-        odds=[
-            {
-                "bookmaker": "Mock",
-                "key": "h2h",
-                "outcomes": [{"name": "Arsenal", "price": 1.75}, {"name": "Chelsea", "price": 4.2}],
-            },
-            {
-                "bookmaker": "Mock",
-                "key": "totals",
-                "outcomes": [{"name": "Over", "point": 2.5, "price": 1.92}],
-            },
-        ],
     )
 
     assert dossier["fixture"]["home_team"] == "Arsenal"
     assert "Chelsea: jogo de Champions League em 4 dias." in dossier["competitive_context"]["summary_lines"]
     assert dossier["corners_context"]["home"]["avg_for"] == 6.0
+    assert "odds" not in dossier
     keys = {item["key"] for item in dossier["market_candidates"]}
-    assert {
-        "corners",
-        "home_over_0_5_goals",
-        "away_over_0_5_goals",
-        "over_1_5_goals",
-        "over_2_5_goals",
-        "favorite_win",
-        "no_pre_match_bet",
-    }.issubset(keys)
-    target_keys = {item["key"] for item in dossier["probability_targets"]}
-    assert {
-        "corners",
-        "home_over_0_5_goals",
-        "away_over_0_5_goals",
-        "over_1_5_goals",
-        "over_2_5_goals",
-        "favorite_win",
-    }.issubset(target_keys)
-    over_25 = next(item for item in dossier["probability_targets"] if item["key"] == "over_2_5_goals")
-    assert over_25["available_odd"] == 1.92
-    assert over_25["implied_probability"] is not None
+    assert {"corners", "home_over_0_5_goals", "over_1_5_goals", "favorite_win", "no_pre_match_bet"}.issubset(keys)
+    target = next(item for item in dossier["probability_targets"] if item["key"] == "over_1_5_goals")
+    assert "available_odd" not in target
+    assert "qualitativa" in target["ai_instruction"]
 
 
-def test_ai_fallback_prioritizes_probabilities_and_no_value_claim():
+def test_ai_fallback_returns_script_and_market_ideas_without_price_language():
     service = FootballAIAnalysisService(client=DummyOpenAIClient())
     result = service.analyze(
         {
             "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
-            "market_candidates": [{"key": "no_pre_match_bet", "signal": "alto"}],
-            "probability_targets": [
-                {"key": "over_1_5_goals", "base_probability_hint": 0.68, "confidence_hint": "media"},
-                {"key": "over_2_5_goals", "base_probability_hint": None, "confidence_hint": "baixa"},
-            ],
-            "data_quality": {"level": "fraco", "notes": ["sem odds equivalentes disponiveis"]},
+            "teams": {
+                "home": {"goals": {"home_avg_scored": 1.8, "home_avg_conceded": 0.8}, "form": {"last_5": "WWDLW"}},
+                "away": {"goals": {"away_avg_scored": 1.1, "away_avg_conceded": 1.5}, "form": {"last_5": "LDWWW"}},
+            },
+            "corners_context": {"combined_team_corners_avg": 8.5},
+            "competitive_context": {"summary_lines": ["Arsenal: briga por titulo."]},
+            "data_quality": {"level": "parcial", "notes": ["escalações ainda nao confirmadas"]},
         }
     )
 
     assert result["mode"] == "football_ai_fallback"
-    assert result["advisor_text"].index("Probabilidades estimadas:") < result["advisor_text"].index("Possivel entrada:")
-    assert "Over 1.5 gols: 68% base" in result["advisor_text"]
-    assert "sem entrada pre-jogo" in result["advisor_text"]
-    assert "value confirmado" not in result["advisor_text"].lower()
+    assert "Ideia geral:" in result["advisor_text"]
+    assert "Como deve ocorrer:" in result["advisor_text"]
+    assert "Ideias de apostas:" in result["advisor_text"]
+    assert "Confianca:" in result["advisor_text"]
+    assert "value" not in result["advisor_text"].lower()
+    assert "odd" not in result["advisor_text"].lower()
 
 
-def test_ai_structured_response_prioritizes_probabilities_before_entry():
+def test_ai_structured_response_formats_script_before_betting_ideas():
     service = FootballAIAnalysisService(client=StructuredOpenAIClient())
     result = service.analyze({"fixture": {"home_team": "Arsenal", "away_team": "Chelsea"}})
 
     assert result["mode"] == "football_ai"
     text = result["advisor_text"]
-    assert text.index("Probabilidades estimadas:") < text.index("Possivel entrada:")
-    assert "- Over 1.5 gols: 72% | confianca media" in text
-    assert "- Escanteios: dados insuficientes | confianca baixa" in text
-    assert "odd minima 1.45" in text
-    assert "sem value confirmado" not in text
+    assert text.index("Ideia geral:") < text.index("Ideias de apostas:")
+    assert "Como deve ocorrer:" in text
+    assert "Over 1.5 gols" in text
+    assert "vencedor seco" in text
 
 
 def test_ai_invalid_structured_response_uses_safe_fallback():
@@ -242,11 +168,11 @@ def test_ai_invalid_structured_response_uses_safe_fallback():
     result = service.analyze(
         {
             "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
-            "probability_targets": [],
+            "teams": {},
             "data_quality": {"notes": ["payload da IA invalido"]},
         }
     )
 
     assert result["mode"] == "football_ai_fallback"
-    assert "Probabilidades estimadas:" in result["advisor_text"]
-    assert "sem entrada pre-jogo" in result["advisor_text"]
+    assert "Ideia geral:" in result["advisor_text"]
+    assert "Ideias de apostas:" in result["advisor_text"]

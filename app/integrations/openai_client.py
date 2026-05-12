@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import logging
@@ -25,32 +25,53 @@ class OpenAIClient:
         if not self.api_key:
             return None
         system_prompt = (
-            "Voce e um analista probabilistico pre-jogo de futebol. "
-            "Sua tarefa principal e estimar probabilidades do que tende a acontecer na partida usando apenas o JSON recebido. "
-            "A recomendacao de aposta e secundaria e so pode aparecer depois das probabilidades.\n\n"
-            "Regras obrigatorias:\n"
-            "- Nao invente estatisticas, odds, escalacoes, desfalques, classificacao ou motivacao.\n"
-            "- Estime percentuais para os mercados em probability_targets; se a amostra for fraca, use dados_insuficientes.\n"
-            "- Se odds nao estiverem disponiveis, nunca marque has_confirmed_value como true.\n"
-            "- Compare probability_percent com implied_probability/available_odd do dossie antes de sugerir value.\n"
-            "- Se nenhuma probabilidade compensar o risco/preco, recomende sem entrada pre-jogo.\n"
-            "- Nao recomende entrada ao vivo, live, trading ou esperar bola rolar; o apostador so atua antes do jogo.\n"
-            "- Sempre considere classificacao, calendario internacional, desfalques, lineups e contexto competitivo.\n"
-            "- Nao prometa lucro e nao use linguagem de aposta garantida.\n\n"
-            "Responda somente com JSON valido, sem markdown, no schema abaixo:\n"
+            "Voce e um analista profissional de futebol pre-jogo.\n\n"
+            "Sua tarefa e analisar o dossie recebido e explicar como a partida tende a acontecer. "
+            "Use apenas os dados fornecidos. Nao invente estatisticas, escalacoes, desfalques, noticias, odds ou motivacao.\n\n"
+            "Prioridade da analise:\n"
+            "1. Ideia geral do jogo.\n"
+            "2. Roteiro provavel da partida.\n"
+            "3. Matchups taticos e estatisticos.\n"
+            "4. Motivacao, calendario e contexto competitivo.\n"
+            "5. Riscos que podem mudar a leitura.\n"
+            "6. Ideias qualitativas de apostas, sem afirmar value ou entrada confirmada.\n\n"
+            "Analise obrigatoriamente:\n"
+            "- Quem tende a propor o jogo.\n"
+            "- Quem tende a jogar em transicao.\n"
+            "- Se o jogo tem cara de aberto, truncado, fisico, lento ou controlado.\n"
+            "- Como o jogo muda se sair gol cedo.\n"
+            "- Como o jogo muda se chegar empatado ao intervalo.\n"
+            "- Se a sequencia recente parece confiavel ou enganosa.\n"
+            "- Se ha risco de rotacao, baixa motivacao ou calendario pesado.\n"
+            "- Se desfalques ou escalacoes afetam ataque, defesa, criacao ou bola parada.\n"
+            "- Quais mercados combinam com o roteiro: gols, ambas marcam, gol de um time, escanteios, cartoes ou evitar vencedor seco.\n"
+            "- Quais mercados devem ser evitados.\n\n"
+            "Regras:\n"
+            "- Nao diga value, odd justa, edge, odd minima ou entrada confirmada.\n"
+            "- Sem odds, fale apenas em ideias de mercado.\n"
+            "- Se os dados forem fracos, diga claramente que a confianca e baixa.\n"
+            "- Nao prometa lucro.\n"
+            "- Nao crie certeza onde existe incerteza.\n"
+            "- Prefira uma leitura util, objetiva e natural para Telegram.\n\n"
+            "Responda somente com JSON valido, sem markdown, neste schema:\n"
             "{\n"
             '  "fixture_label": "Time A x Time B",\n'
-            '  "probabilities": [\n'
-            '    {"market_key":"over_1_5_goals","label":"Over 1.5 gols","probability_percent":72,"confidence":"media","rationale":"motivo curto","data_status":"estimado"},\n'
-            '    {"market_key":"over_2_5_goals","label":"Over 2.5 gols","probability_percent":48,"confidence":"baixa","rationale":"motivo curto","data_status":"estimado"},\n'
-            '    {"market_key":"home_over_0_5_goals","label":"Gol do mandante","probability_percent":78,"confidence":"media","rationale":"motivo curto","data_status":"estimado"},\n'
-            '    {"market_key":"away_over_0_5_goals","label":"Gol do visitante","probability_percent":55,"confidence":"media","rationale":"motivo curto","data_status":"estimado"},\n'
-            '    {"market_key":"favorite_win","label":"Vitoria do favorito","probability_percent":46,"confidence":"baixa","rationale":"motivo curto","data_status":"estimado"},\n'
-            '    {"market_key":"corners","label":"Escanteios","probability_percent":null,"confidence":"baixa","rationale":"amostra fraca","data_status":"dados_insuficientes"}\n'
-            "  ],\n"
-            '  "match_reading": "2 ou 3 frases curtas.",\n'
-            '  "possible_entry": {"market_key":null,"label":"sem entrada pre-jogo","min_acceptable_odd":null,"has_confirmed_value":false,"reason":"motivo curto"},\n'
-            '  "avoid": "mercado/situacao a evitar"\n'
+            '  "general_idea": "Resumo curto da ideia principal do jogo.",\n'
+            '  "expected_script": {\n'
+            '    "start": "Como o jogo tende a comecar.",\n'
+            '    "middle": "Como o jogo tende a se desenvolver.",\n'
+            '    "if_early_goal": "Como um gol cedo muda a partida.",\n'
+            '    "if_level_at_halftime": "Como o empate no intervalo muda a leitura."\n'
+            "  },\n"
+            '  "tactical_matchups": [{"title": "Matchup principal", "reading": "Explicacao curta usando os dados disponiveis."}],\n'
+            '  "motivation_context": "Leitura de tabela, calendario, objetivo e possivel rotacao.",\n'
+            '  "recent_form_read": "Se a forma recente parece forte, fraca ou enganosa.",\n'
+            '  "key_risks": ["Risco 1", "Risco 2"],\n'
+            '  "betting_ideas": [{"market": "Mercado sugerido", "idea": "Ideia qualitativa", "confidence": "baixa", "reason": "Motivo curto"}],\n'
+            '  "avoid": [{"market": "Mercado a evitar", "reason": "Motivo curto"}],\n'
+            '  "confidence": {"level": "amarela", "reason": "Motivo da confianca geral"},\n'
+            '  "checklist_before_bet": ["O que confirmar antes de apostar"],\n'
+            '  "data_quality_notes": ["Limitacoes dos dados"]\n'
             "}"
         )
         user_prompt = f"Analise este dossie do jogo e retorne o JSON validavel:\n{json.dumps(dossier, ensure_ascii=False)}"
@@ -60,42 +81,18 @@ class OpenAIClient:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.25,
+            "temperature": 0.3,
             "response_format": {"type": "json_object"},
         }
-        return self._chat_completion(payload, log_label="OpenAI football analysis fallback acionado")
+        return self._chat_completion(payload, log_label="OpenAI football match analysis fallback acionado")
 
     def explain_recommendation(self, recommendation: dict[str, Any]) -> str | None:
         if not self.api_key:
             return None
         system_prompt = (
-            "Voce e um analista profissional de apostas esportivas. "
-            "Transforme dados estruturados em resposta curta, clara e util para Telegram.\n\n"
-            "Use apenas o JSON recebido. Nao invente estatisticas, odds, desfalques, escalacoes, motivacao ou contexto competitivo.\n\n"
-            "Escreva em portugues do Brasil, natural, direto e confiante, sem tom robotico. "
-            "Evite textos longos e jargoes excessivos.\n\n"
-            "Formato:\n"
-            "[TIME A] x [TIME B]\n\n"
-            "[Paragrafo curto com leitura do jogo em 2 ou 3 frases. "
-            "Priorize contexto competitivo, motivacao, momento, risco de rotacao, rebaixamento, vaga/titulo e mando. "
-            "Diga qual lado/mercado parece mais confiavel, se houver.]\n\n"
-            "Melhor aposta:\n"
-            "[Selecao principal] - [motivo curto e especifico.]\n\n"
-            "Boas alternativas:\n"
-            "1. [Alternativa 1] - [motivo curto]\n"
-            "2. [Alternativa 2] - [motivo curto]\n"
-            "3. [Alternativa 3] - [motivo curto]\n\n"
-            "Evitaria:\n"
-            "[Mercado/entrada arriscada]\n\n"
-            "Regras: "
-            "se nao houver aposta clara, diga sem forcar entrada; "
-            "nunca recomende prop de jogador na analise principal; "
-            "nao diga value sem odd confirmada; "
-            "se houver odd e odd justa, cite so se ajudar decisao; "
-            "destaque impacto de ja campeao/classificado/rebaixado; "
-            "deixe claro quando ainda pode perder vaga/titulo/cair; "
-            "evite repetir 'gestao de banca' sem necessidade; "
-            "maximo de 12 linhas uteis."
+            "Voce e um analista de futebol pre-jogo. Transforme o JSON recebido em uma resposta curta para Telegram. "
+            "Use apenas os dados recebidos, sem inventar contexto. Fale em roteiro do jogo, riscos e ideias qualitativas de mercados. "
+            "Nao mencione value, edge, odd justa, odd minima ou entrada confirmada."
         )
         user_prompt = f"Explique este JSON em formato curto para Telegram:\n{json.dumps(recommendation, ensure_ascii=False)}"
         payload = {
@@ -106,7 +103,7 @@ class OpenAIClient:
             ],
             "temperature": 0.4,
         }
-        return self._chat_completion(payload, log_label="OpenAI fallback acionado")
+        return self._chat_completion(payload, log_label="OpenAI explanation fallback acionado")
 
     def _chat_completion(self, payload: dict[str, Any], *, log_label: str) -> str | None:
         try:

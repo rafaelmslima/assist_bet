@@ -38,9 +38,7 @@ class FootballMatchDossierService:
         home_team_data: dict[str, Any],
         away_team_data: dict[str, Any],
         football_context: dict[str, Any],
-        odds: list[dict[str, Any]],
         player_context: Any | None = None,
-        odds_error: str | None = None,
     ) -> dict[str, Any]:
         lineups = getattr(player_context, "lineups", {}) or {}
         injuries = list(getattr(player_context, "injuries", []) or [])
@@ -53,7 +51,6 @@ class FootballMatchDossierService:
             home=home_team_data,
             away=away_team_data,
             corners=corners,
-            odds=odds,
             football_context=football_context,
             lineups=lineups,
             injuries=injuries,
@@ -67,8 +64,6 @@ class FootballMatchDossierService:
             coverage=coverage,
             lineups=lineups,
             injuries=injuries,
-            odds=odds,
-            odds_error=odds_error,
             corners=corners,
             player_quality=player_quality,
         )
@@ -88,21 +83,15 @@ class FootballMatchDossierService:
             "lineups": self._lineup_summary(lineups),
             "absences": self._injury_summary(injuries),
             "predictions": _compact_prediction(predictions),
-            "odds": {
-                "available": bool(odds),
-                "error": odds_error,
-                "markets": _summarize_odds(odds),
-            },
             "corners_context": corners,
             "market_candidates": markets,
             "probability_targets": probability_targets,
             "analysis_rules": {
                 "ai_must_estimate": list(MARKET_CANDIDATES[:-1]),
                 "ai_may_recommend": list(MARKET_CANDIDATES),
-                "do_not_invent": ["odds", "lineups", "injuries", "standings", "statistics"],
-                "no_value_without_odd": True,
-                "primary_task": "estimar probabilidades pre-jogo por mercado antes de sugerir qualquer entrada",
-                "fallback_when_weak": "sem entrada pre-jogo",
+                "do_not_invent": ["lineups", "injuries", "standings", "statistics", "news"],
+                "primary_task": "explicar o roteiro provavel do jogo antes de sugerir ideias qualitativas de mercado",
+                "fallback_when_weak": "confianca baixa e jogo para observacao",
             },
             "data_quality": {
                 "level": _quality_level(quality_notes),
@@ -210,7 +199,6 @@ class FootballMatchDossierService:
         home: dict[str, Any],
         away: dict[str, Any],
         corners: dict[str, Any],
-        odds: list[dict[str, Any]],
         football_context: dict[str, Any],
         lineups: dict[str, Any],
         injuries: list[dict[str, Any]],
@@ -220,7 +208,7 @@ class FootballMatchDossierService:
         home_goal_signal = _avg_known(home.get("home_avg_scored"), away.get("away_avg_conceded"), home.get("last_5_avg_scored"))
         away_goal_signal = _avg_known(away.get("away_avg_scored"), home.get("home_avg_conceded"), away.get("last_5_avg_scored"))
         total_signal = _sum_known(home_goal_signal, away_goal_signal)
-        favorite = _favorite_from_odds_or_stats(odds, home_name, away_name, home_goal_signal, away_goal_signal)
+        favorite = _favorite_from_stats(home_name, away_name, home_goal_signal, away_goal_signal)
         risk_flags = _risk_flags(football_context, lineups, injuries)
 
         candidates = [
@@ -230,7 +218,6 @@ class FootballMatchDossierService:
                 "signal": _corner_signal(corners),
                 "evidence": _corner_evidence(corners),
                 "risk_flags": risk_flags,
-                "available_odd": _find_total_like_odd(odds, ("corners", "corner", "escanteios")),
             },
             {
                 "key": "home_over_0_5_goals",
@@ -238,7 +225,6 @@ class FootballMatchDossierService:
                 "signal": _signal_from_goal_rate(home_goal_signal),
                 "evidence": [f"sinal estimado de gol do mandante: {_fmt(home_goal_signal)}"],
                 "risk_flags": risk_flags,
-                "available_odd": _find_team_total_odd(odds, home_name),
             },
             {
                 "key": "away_over_0_5_goals",
@@ -246,7 +232,6 @@ class FootballMatchDossierService:
                 "signal": _signal_from_goal_rate(away_goal_signal),
                 "evidence": [f"sinal estimado de gol do visitante: {_fmt(away_goal_signal)}"],
                 "risk_flags": risk_flags,
-                "available_odd": _find_team_total_odd(odds, away_name),
             },
             {
                 "key": "over_1_5_goals",
@@ -254,7 +239,6 @@ class FootballMatchDossierService:
                 "signal": _signal_from_goal_rate(total_signal, target=1.8),
                 "evidence": [f"soma projetada de gols: {_fmt(total_signal)}"],
                 "risk_flags": risk_flags,
-                "available_odd": _find_total_odd(odds, 1.5),
             },
             {
                 "key": "over_2_5_goals",
@@ -262,7 +246,6 @@ class FootballMatchDossierService:
                 "signal": _signal_from_goal_rate(total_signal, target=2.6),
                 "evidence": [f"soma projetada de gols: {_fmt(total_signal)}"],
                 "risk_flags": risk_flags,
-                "available_odd": _find_total_odd(odds, 2.5),
             },
             {
                 "key": "favorite_win",
@@ -270,15 +253,13 @@ class FootballMatchDossierService:
                 "signal": favorite.get("signal"),
                 "evidence": favorite.get("evidence") or [],
                 "risk_flags": risk_flags + favorite.get("risk_flags", []),
-                "available_odd": favorite.get("odd"),
             },
             {
                 "key": "no_pre_match_bet",
                 "label": "Sem entrada pre-jogo",
-                "signal": _wait_signal(risk_flags, total_signal, odds),
-                "evidence": ["opcao obrigatoria quando dados, odds ou escalacoes nao sustentam probabilidade/value"],
+                "signal": _wait_signal(risk_flags, total_signal),
+                "evidence": ["opcao obrigatoria quando dados ou escalacoes nao sustentam uma leitura clara"],
                 "risk_flags": risk_flags,
-                "available_odd": None,
             },
         ]
         return candidates
@@ -320,8 +301,6 @@ class FootballMatchDossierService:
         coverage: dict[str, bool],
         lineups: dict[str, Any],
         injuries: list[dict[str, Any]],
-        odds: list[dict[str, Any]],
-        odds_error: str | None,
         corners: dict[str, Any],
         player_quality: list[str],
     ) -> list[str]:
@@ -339,8 +318,6 @@ class FootballMatchDossierService:
             notes.append("liga sem cobertura de desfalques")
         elif not injuries:
             notes.append("sem desfalques confirmados na API")
-        if not odds:
-            notes.append(odds_error or "sem odds equivalentes disponiveis")
         if not _nested_get(corners, "home", "sample_size") and not _nested_get(corners, "away", "sample_size"):
             notes.append("escanteios sem amostra recente")
         notes.extend(player_quality[:4])
@@ -402,36 +379,6 @@ def _stat_value(stats: Any, stat_type: str) -> float | None:
     return None
 
 
-def _summarize_odds(odds: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for market in odds:
-        key = market.get("key") or market.get("market")
-        bookmaker = market.get("bookmaker")
-        for outcome in market.get("outcomes") or []:
-            rows.append(
-                {
-                    "bookmaker": bookmaker,
-                    "market": key,
-                    "selection": outcome.get("name") or outcome.get("selection"),
-                    "point": outcome.get("point"),
-                    "price": outcome.get("price") or outcome.get("odd"),
-                }
-            )
-            if len(rows) >= 20:
-                return rows
-        if not market.get("outcomes") and market.get("selection"):
-            rows.append(
-                {
-                    "bookmaker": bookmaker,
-                    "market": key,
-                    "selection": market.get("selection"),
-                    "point": market.get("point"),
-                    "price": market.get("price") or market.get("odd"),
-                }
-            )
-    return rows
-
-
 def _build_probability_targets(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     targets: list[dict[str, Any]] = []
     for item in candidates:
@@ -439,30 +386,18 @@ def _build_probability_targets(candidates: list[dict[str, Any]]) -> list[dict[st
         if key == "no_pre_match_bet":
             continue
         base_probability = _base_probability_from_signal(item.get("signal"))
-        odd = _to_float(item.get("available_odd"))
-        implied_probability = round(1 / odd, 4) if odd and odd > 1 else None
-        fair_odd = round(1 / base_probability, 2) if base_probability and base_probability > 0 else None
-        edge_hint = (
-            round(base_probability - implied_probability, 4)
-            if base_probability is not None and implied_probability is not None
-            else None
-        )
         targets.append(
             {
                 "key": key,
                 "market": item.get("label"),
                 "base_probability_hint": base_probability,
-                "base_fair_odd_hint": fair_odd,
-                "available_odd": odd,
-                "implied_probability": implied_probability,
-                "edge_hint": edge_hint,
                 "confidence_hint": _confidence_hint(item.get("signal"), item.get("risk_flags") or []),
                 "sample_and_metrics": {
                     "signal": item.get("signal"),
                     "evidence": item.get("evidence") or [],
                     "risk_flags": item.get("risk_flags") or [],
                 },
-                "ai_instruction": "estime a probabilidade final pre-jogo deste mercado; use dados insuficientes se a amostra nao sustentar percentual.",
+                "ai_instruction": "use este mercado apenas como ideia qualitativa se ele combinar com o roteiro do jogo.",
             }
         )
     return targets
@@ -487,27 +422,14 @@ def _confidence_hint(signal: Any, risk_flags: list[str]) -> str:
     return "baixa" if len(risk_flags) >= 2 else "media"
 
 
-def _favorite_from_odds_or_stats(
-    odds: list[dict[str, Any]],
+def _favorite_from_stats(
     home_name: str,
     away_name: str,
     home_signal: float | None,
     away_signal: float | None,
 ) -> dict[str, Any]:
-    home_odd = _find_h2h_odd(odds, home_name)
-    away_odd = _find_h2h_odd(odds, away_name)
-    if home_odd and away_odd:
-        team = home_name if home_odd < away_odd else away_name
-        odd = min(home_odd, away_odd)
-        return {
-            "team": team,
-            "odd": odd,
-            "signal": "medio" if odd >= 1.45 else "baixo",
-            "evidence": [f"favorito por odds h2h: {team} @{odd:.2f}"],
-            "risk_flags": ["odd baixa/espremida"] if odd < 1.45 else [],
-        }
     if home_signal is None and away_signal is None:
-        return {"team": None, "odd": None, "signal": "baixo", "evidence": ["favorito indefinido"], "risk_flags": ["sem odds h2h"]}
+        return {"team": None, "signal": "baixo", "evidence": ["favorito indefinido"], "risk_flags": ["sem vantagem estatistica clara"]}
     if (home_signal or 0) >= (away_signal or 0):
         team = home_name
         diff = (home_signal or 0) - (away_signal or 0)
@@ -516,10 +438,9 @@ def _favorite_from_odds_or_stats(
         diff = (away_signal or 0) - (home_signal or 0)
     return {
         "team": team,
-        "odd": None,
         "signal": "alto" if diff >= 0.6 else "medio" if diff >= 0.25 else "baixo",
         "evidence": [f"favorito estatistico por producao de gols: {team}"],
-        "risk_flags": ["sem odds h2h para confirmar favorito"],
+        "risk_flags": ["favoritismo apenas estatistico, confirmar escalacao e contexto"],
     }
 
 
@@ -562,8 +483,8 @@ def _corner_evidence(corners: dict[str, Any]) -> list[str]:
     ]
 
 
-def _wait_signal(risk_flags: list[str], total_signal: float | None, odds: list[dict[str, Any]]) -> str:
-    if len(risk_flags) >= 3 or not odds:
+def _wait_signal(risk_flags: list[str], total_signal: float | None) -> str:
+    if len(risk_flags) >= 3:
         return "alto"
     if total_signal is None:
         return "medio"
@@ -578,46 +499,6 @@ def _signal_from_goal_rate(value: float | None, target: float = 1.0) -> str:
     if value >= target:
         return "medio"
     return "baixo"
-
-
-def _find_total_odd(odds: list[dict[str, Any]], point: float) -> float | None:
-    for market in odds:
-        key = str(market.get("key") or market.get("market") or "").lower()
-        if "total" not in key:
-            continue
-        for outcome in market.get("outcomes") or []:
-            if str(outcome.get("name") or "").lower() == "over" and abs((_to_float(outcome.get("point")) or -1) - point) < 0.01:
-                return _to_float(outcome.get("price") or outcome.get("odd"))
-    return None
-
-
-def _find_total_like_odd(odds: list[dict[str, Any]], terms: tuple[str, ...]) -> float | None:
-    normalized_terms = tuple(term.lower() for term in terms)
-    for market in odds:
-        label = " ".join(str(market.get(key, "")) for key in ("key", "market", "selection")).lower()
-        if any(term in label for term in normalized_terms):
-            outcomes = market.get("outcomes") or []
-            if outcomes:
-                return _to_float(outcomes[0].get("price") or outcomes[0].get("odd"))
-            return _to_float(market.get("price") or market.get("odd"))
-    return None
-
-
-def _find_team_total_odd(odds: list[dict[str, Any]], team_name: str) -> float | None:
-    return _find_total_like_odd(odds, (team_name.lower(), "team total", "gols do time"))
-
-
-def _find_h2h_odd(odds: list[dict[str, Any]], team_name: str) -> float | None:
-    wanted = _norm(team_name)
-    for market in odds:
-        key = str(market.get("key") or market.get("market") or "").lower()
-        if key != "h2h":
-            continue
-        for outcome in market.get("outcomes") or []:
-            name = _norm(outcome.get("name") or outcome.get("selection"))
-            if wanted and (wanted == name or wanted in name or name in wanted):
-                return _to_float(outcome.get("price") or outcome.get("odd"))
-    return None
 
 
 def _quality_level(notes: list[str]) -> str:

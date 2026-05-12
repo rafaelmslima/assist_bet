@@ -10,6 +10,7 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.testdeps/
 
 # Virtual environments
 venv/
@@ -27,4 +28,3 @@ env/
 Thumbs.db
 .idea/
 .vscode/
-

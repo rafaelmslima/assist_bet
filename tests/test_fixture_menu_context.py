@@ -25,11 +25,11 @@ class FakeFixtureMenuService(FixtureMenuService):
             "advice": {
                 "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
                 "main_recommendation": {
-                    "market": "Total de gols",
+                    "market": "gols",
                     "selection": "Over 1.5 gols",
                     "confidence": "media",
                     "risk_level": "medio",
-                    "fair_odd": 1.62,
+                    "summary": "Arsenal deve propor e Chelsea pode responder em transicao.",
                 },
                 "context_summary": {
                     "summary_lines": [
@@ -38,6 +38,10 @@ class FakeFixtureMenuService(FixtureMenuService):
                     ]
                 },
                 "final_verdict": "Eu olharia gols antes de vencedor.",
+            },
+            "analysis": {
+                "general_idea": "Arsenal deve propor e Chelsea pode responder em transicao.",
+                "confidence": {"level": "amarela", "reason": "boa leitura, mas falta escalação."},
             },
         }
 
@@ -53,4 +57,3 @@ class FixtureMenuContextTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

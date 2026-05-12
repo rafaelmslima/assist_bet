@@ -1,66 +1,67 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 Confidence = Literal["baixa", "media", "alta"]
+TrafficLight = Literal["vermelha", "amarela", "verde"]
 
 
-class FootballProbabilityEstimate(BaseModel):
-    model_config = ConfigDict(validate_default=True)
+class ExpectedScript(BaseModel):
+    start: str = ""
+    middle: str = ""
+    if_early_goal: str = ""
+    if_level_at_halftime: str = ""
 
-    market_key: str
-    label: str
-    probability_percent: int | None = Field(default=None, ge=1, le=99)
+
+class TacticalMatchup(BaseModel):
+    title: str = "Matchup principal"
+    reading: str = ""
+
+
+class BettingIdea(BaseModel):
+    market: str = "mercado qualitativo"
+    idea: str = ""
     confidence: Confidence = "baixa"
-    rationale: str = ""
-    data_status: Literal["estimado", "dados_insuficientes"] = "estimado"
-
-    @field_validator("data_status")
-    @classmethod
-    def require_probability_when_estimated(cls, value: str, info):
-        probability = info.data.get("probability_percent")
-        if value == "estimado" and probability is None:
-            raise ValueError("probability_percent is required when data_status is estimado")
-        return value
-
-
-class FootballBetSuggestion(BaseModel):
-    market_key: str | None = None
-    label: str = "sem entrada pre-jogo"
-    min_acceptable_odd: float | None = Field(default=None, gt=1)
-    has_confirmed_value: bool = False
     reason: str = ""
 
-    @model_validator(mode="after")
-    def require_min_odd_when_value_is_confirmed(self) -> "FootballBetSuggestion":
-        if self.has_confirmed_value and self.min_acceptable_odd is None:
-            raise ValueError("min_acceptable_odd is required when has_confirmed_value is true")
-        return self
+
+class AvoidMarket(BaseModel):
+    market: str = "mercado a evitar"
+    reason: str = ""
+
+
+class OverallConfidence(BaseModel):
+    level: TrafficLight = "amarela"
+    reason: str = ""
 
 
 class FootballAIAnalysis(BaseModel):
-    fixture_label: str
-    probabilities: list[FootballProbabilityEstimate] = Field(min_length=1)
-    match_reading: str
-    possible_entry: FootballBetSuggestion
-    avoid: str
+    model_config = ConfigDict(validate_default=True)
 
-    @field_validator("probabilities")
+    fixture_label: str
+    general_idea: str
+    expected_script: ExpectedScript = Field(default_factory=ExpectedScript)
+    tactical_matchups: list[TacticalMatchup] = Field(default_factory=list)
+    motivation_context: str = ""
+    recent_form_read: str = ""
+    key_risks: list[str] = Field(default_factory=list)
+    betting_ideas: list[BettingIdea] = Field(default_factory=list)
+    avoid: list[AvoidMarket] = Field(default_factory=list)
+    confidence: OverallConfidence = Field(default_factory=OverallConfidence)
+    checklist_before_bet: list[str] = Field(default_factory=list)
+    data_quality_notes: list[str] = Field(default_factory=list)
+
+    @field_validator("general_idea")
     @classmethod
-    def require_core_markets(cls, values: list[FootballProbabilityEstimate]):
-        required = {
-            "over_1_5_goals",
-            "over_2_5_goals",
-            "home_over_0_5_goals",
-            "away_over_0_5_goals",
-            "favorite_win",
-            "corners",
-        }
-        present = {item.market_key for item in values}
-        missing = required - present
-        if missing:
-            raise ValueError(f"missing probability markets: {', '.join(sorted(missing))}")
-        return values
+    def require_general_idea(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("general_idea is required")
+        return value
+
+    @field_validator("betting_ideas")
+    @classmethod
+    def limit_betting_ideas(cls, values: list[BettingIdea]) -> list[BettingIdea]:
+        return values[:5]

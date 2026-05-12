@@ -1,23 +1,19 @@
-# Sports Betting Assistant
+﻿# Football Match Analyst Bot
 
-Bot de Telegram em Python para atuar como assessor de apostas esportivas. O foco é ajudar o apostador a escolher jogos, interpretar estatísticas, comparar odds e decidir quando faz sentido entrar, reduzir risco ou evitar uma aposta.
+Bot de Telegram em Python para analisar jogos de futebol com apoio de IA. O foco agora e explicar como a partida tende a acontecer: roteiro provavel, matchups, contexto competitivo, riscos e ideias qualitativas de mercados.
 
-O bot não promete lucro e não entrega aposta garantida. Ele organiza dados e gera leitura esportiva com linguagem opinativa, sempre com gestão de risco.
+O bot nao promete lucro, nao trabalha com aposta garantida e nao depende de odds para decidir. Ele organiza dados da API-Football e usa OpenAI para transformar o dossie em leitura esportiva util.
 
 ## Funcionalidades atuais
 
-- Menu principal com Futebol, NBA, Minhas Apostas, Configurações e Ajuda.
+- Menu principal com Futebol, Status e Ajuda.
 - Futebol:
-  - Jogos de hoje e de amanhã por liga.
-  - Jogos com melhor leitura.
-  - Análise completa de jogo com melhor aposta, riscos, odds, alternativas, o que evitar e veredito.
-  - Jogadores interessantes por jogo quando a API expõe dados suficientes.
-- NBA:
-  - Jogos de hoje e de amanhã.
-  - Props-first: leitura de jogadores por pontos, rebotes, assistências, bolas de 3 e PRA.
-- Registro e acompanhamento de apostas.
-- Tutorial interativo com `/tutorial`.
-- SQLite local por padrão, preparado para PostgreSQL via `DATABASE_URL`.
+  - Jogos de hoje e de amanha por liga.
+  - Melhores leituras do dia por clareza do roteiro e qualidade dos dados.
+  - Analise inteligente por jogo com ideia geral, roteiro, matchups, riscos, ideias de apostas e confianca.
+  - Jogadores e desfalques quando a API expõe dados suficientes.
+- Busca por confronto digitado no formato `Time A x Time B`.
+- SQLite local por padrao, preparado para PostgreSQL via `DATABASE_URL`.
 
 ## Arquitetura
 
@@ -26,11 +22,11 @@ app/
   main.py
   config.py
   bot/              # comandos, menus, callbacks, formatadores e tutorial
-  database/         # SQLAlchemy, modelos e repository
-  integrations/     # API-Football, balldontlie e The Odds API
-  services/         # analysis, advisor engines, odds, futebol, NBA e apostas
+  database/         # SQLAlchemy, modelos e repository legado
+  integrations/     # API-Football e OpenAI
+  services/         # analise de futebol, contexto, dossie e IA
   schemas/          # schemas Pydantic
-  jobs/             # jobs futuros
+  jobs/             # jobs futuros/legados
 ```
 
 ## Tecnologias
@@ -39,29 +35,28 @@ app/
 - python-telegram-bot
 - SQLAlchemy
 - SQLite em desenvolvimento
-- PostgreSQL em produção
+- PostgreSQL em producao
 - python-dotenv
 - httpx
-- APScheduler preparado para evolução
+- Pydantic
+- Alembic
 
-## Configuração
+## Configuracao
 
 Crie um `.env` a partir de `.env.example`:
 
 ```env
 TELEGRAM_BOT_TOKEN=seu-token-do-telegram
 DATABASE_URL=sqlite:///./sports_betting_assistant.db
-DATABASE_CREATE_ALL=false
-DATABASE_MIGRATE_ON_STARTUP=false
 OPENAI_API_KEY=sua-chave-openai
 OPENAI_MODEL=gpt-4o-mini
 API_FOOTBALL_KEY=sua-chave-api-football
-BALLDONTLIE_KEY=sua-chave-balldontlie
-ODDS_API_KEY=sua-chave-the-odds-api
+API_FOOTBALL_BASE_URL=https://v3.football.api-sports.io
+API_FOOTBALL_HOST=
 BOT_ANALYSIS_STYLE=advisor
 ```
 
-Importante: nunca versionar `.env`. O projeto já inclui `.gitignore` para proteger chaves, banco local e `venv`.
+Importante: nunca versionar `.env`. O projeto ja inclui `.gitignore` para proteger chaves, banco local e ambientes virtuais.
 
 ## Rodando localmente
 
@@ -72,7 +67,7 @@ pip install -r requirements.txt
 python app/main.py
 ```
 
-Se o PowerShell bloquear a ativação:
+Se o PowerShell bloquear a ativacao:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
@@ -81,28 +76,24 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ## Como usar no Telegram
 
 1. Envie `/start`.
-2. Escolha `Futebol` ou `NBA`.
-3. Escolha `Jogos de Hoje`, `Jogos de Amanhã` ou `Jogadores do Dia`.
+2. Escolha `Futebol`.
+3. Escolha `Jogos de Hoje`, `Jogos de Amanha`, `Melhores Leituras` ou `Buscar Jogo`.
 4. Selecione o jogo.
-5. Leia a recomendação principal, riscos, odds, alternativas e veredito.
+5. Leia o roteiro da partida, os pontos-chave, as ideias qualitativas e a confianca da leitura.
 
-Comandos úteis:
+Comandos uteis:
 
 - `/start`
 - `/tutorial`
 - `/help`
-- `/apostas`
-- `/roi`
-- `/resultado ID won|lost|void`
+- `/status`
 
-## Integrações externas
+## Integracoes externas
 
-- API-Football: jogos, times, estatísticas, escalações, jogadores, lesões e previsões quando o plano permitir.
-- OpenAI: analise probabilistica pre-jogo do dossie de futebol. Sem `OPENAI_API_KEY`, o bot usa fallback local curto e nao inventa percentuais finais.
-- balldontlie: jogos, times, jogadores e stats da NBA.
-- The Odds API: odds pré-jogo e mercados disponíveis.
+- API-Football: jogos, times, estatisticas, classificacao, calendario, escalações, jogadores, lesoes e previsoes quando o plano permitir.
+- OpenAI: interpreta o dossie de futebol e gera a leitura inteligente do jogo.
 
-Quando uma API não expõe dado suficiente, o bot deve responder análise parcial e reduzir confiança, sem inventar estatísticas.
+Quando uma API nao expõe dado suficiente, o bot deve responder analise parcial e reduzir confianca, sem inventar estatisticas.
 
 ## PostgreSQL
 
@@ -114,9 +105,7 @@ DATABASE_URL=postgresql+psycopg://usuario:senha@host:5432/database
 
 Se o provedor entregar `postgresql://...` ou `postgres://...`, o app converte automaticamente para o driver `psycopg` usado no `requirements.txt`.
 
-Para produção, recomenda-se adicionar Alembic antes de evoluir o schema.
-
-O projeto já inclui uma base de migrations com Alembic. Antes de subir o bot em produção, rode:
+O projeto inclui migrations com Alembic. Antes de subir o bot em producao, rode:
 
 ```powershell
 alembic upgrade head
@@ -124,17 +113,15 @@ alembic upgrade head
 
 Em producao (`ENVIRONMENT=production`), o app tambem executa `alembic upgrade head` na inicializacao por padrao. Para desativar, defina `DATABASE_MIGRATE_ON_STARTUP=false` e rode a migration por fora.
 
-Em produção, `Base.metadata.create_all()` não roda por padrão quando `ENVIRONMENT=production`. Use `DATABASE_CREATE_ALL=true` apenas como escape temporário em ambiente controlado.
-
 ## Railway
 
-Arquivos incluídos:
+Arquivos incluidos:
 
 - `Procfile`
 - `railway.json`
 - `runtime.txt`
 
-Variáveis obrigatórias no Railway:
+Variaveis obrigatorias no Railway:
 
 - `TELEGRAM_BOT_TOKEN`
 - `DATABASE_URL`
@@ -142,12 +129,10 @@ Variáveis obrigatórias no Railway:
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL=gpt-4o-mini`
 - `API_FOOTBALL_KEY`
-- `BALLDONTLIE_KEY`
-- `ODDS_API_KEY`
 
-Use um serviço PostgreSQL no Railway, configure `DATABASE_URL` e execute `alembic upgrade head` antes de iniciar o worker.
+Use um servico PostgreSQL no Railway, configure `DATABASE_URL` e execute `alembic upgrade head` antes de iniciar o worker.
 
-## Testes e validação
+## Testes e validacao
 
 ```powershell
 python -m compileall app
@@ -156,14 +141,11 @@ python -m pytest
 
 ## Roadmap
 
-- MVP atual: assessor por jogo, futebol e NBA, odds e tracking de apostas.
-- Próximos passos:
-  - Cache com TTL para reduzir rate limit.
-  - Testes de callbacks Telegram.
-  - Match mais robusto de odds por mercado/linha.
-  - Stats avançadas de jogadores e contexto de escalação.
-  - Deploy com PostgreSQL e observabilidade.
+- Aprimorar ranking de melhores leituras por clareza de roteiro.
+- Salvar analises geradas e comparar com o pos-jogo para auditar acertos e erros.
+- Melhorar leitura de escalações confirmadas e impacto de desfalques.
+- Adicionar observabilidade de falhas de API e qualidade de dados.
 
-## Aviso responsável
+## Aviso responsavel
 
-Este bot é ferramenta de apoio à análise. Ele não garante lucro, não prevê resultado com certeza e não substitui gestão de banca. Apostas envolvem risco.
+Este bot e ferramenta de apoio a analise. Ele nao garante lucro, nao preve resultado com certeza e nao substitui gestao de risco. Apostas envolvem risco.

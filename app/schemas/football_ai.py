@@ -24,6 +24,8 @@ class TacticalMatchup(BaseModel):
 class BettingIdea(BaseModel):
     market: str = "mercado qualitativo"
     idea: str = ""
+    projection: str = ""
+    projection_analysis: str = ""
     confidence: Confidence = "baixa"
     reason: str = ""
 

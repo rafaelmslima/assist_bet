@@ -21,26 +21,23 @@ class FootballResponseService:
         home = fixture.get("home_team") or fixture.get("home_team_name") or "Mandante"
         away = fixture.get("away_team") or fixture.get("away_team_name") or "Visitante"
 
-        lines = [
-            f"{home} x {away}",
-            "",
-            f"Ideia geral: {_compact(_clean(main.get('summary')) or _clean(advice.get('final_verdict')) or 'leitura parcial do confronto.', 140)}",
-            f"Ideia de mercado: {self._entry_label(main)}",
-            f"Motivo: {self._reason_line(main, advice)}",
-            f"Riscos: {self._risk_line(main, advice)}",
-        ]
-
         context = self._context_lines(advice.get("context_summary"))
-        if context:
-            lines.append("Contexto:")
-            lines.extend(context[:2])
-
         alternatives = self._alternatives(advice.get("alternative_recommendations"), limit=2)
-        lines.append("Ideias alternativas:")
-        lines.extend(alternatives)
-        lines.append("Evitaria:")
-        lines.append(self._avoid_line(advice.get("avoid_markets")) or "forcar mercado sem confirmacao do roteiro.")
-        return "\n".join(line for line in lines if line is not None)
+        avoid = self._avoid_line(advice.get("avoid_markets")) or "forçar mercado sem confirmação do roteiro"
+        summary = _clean(main.get("summary")) or _clean(advice.get("final_verdict")) or "os dados ainda deixam a leitura parcial"
+        entry = self._entry_label(main)
+        risk = self._risk_line(main, advice)
+
+        lines = [f"{home} x {away}", ""]
+        lines.append(f"A leitura aqui é que {summary[0].lower() + summary[1:] if summary else 'o confronto ainda pede cautela.'}")
+        if context:
+            lines.append(f"O contexto pesa porque {_compact(' '.join(context[:2]), 180)}")
+        lines.append(f"Como ideia de mercado, eu olharia primeiro para {entry}. O ponto de cuidado é {risk[0].lower() + risk[1:] if risk else 'confirmar as informações finais do jogo.'}")
+        if alternatives:
+            lines.append(f"Se quiser uma segunda leitura, {alternatives}. Evitaria {avoid}.")
+        else:
+            lines.append(f"Evitaria {avoid}.")
+        return "\n\n".join(line for line in lines if line)
 
     def _entry_label(self, main: dict[str, Any]) -> str:
         selection = str(main.get("selection") or "sem ideia forte")
@@ -65,7 +62,7 @@ class FootballResponseService:
             return f"risco {risk or 'medio'}, confianca {confidence or 'media'}."
         return "confirmar escalacoes, desfalques e contexto final."
 
-    def _alternatives(self, alternatives: Any, limit: int = 3) -> list[str]:
+    def _alternatives(self, alternatives: Any, limit: int = 3) -> str:
         rows = []
         alt_list = [item for item in (alternatives or []) if isinstance(item, dict)]
         for idx in range(limit):
@@ -73,10 +70,8 @@ class FootballResponseService:
                 item = alt_list[idx]
                 sel = str(item.get("selection") or item.get("market") or "alternativa")
                 reason = _compact(_clean(item.get("reason")) or "linha secundaria para o mesmo cenario.", 70)
-                rows.append(f"{idx + 1}. {sel} - {reason}")
-            else:
-                rows.append(f"{idx + 1}. Sem alternativa forte - melhor observar o jogo.")
-        return rows
+                rows.append(f"{sel} ({reason})")
+        return _natural_join(rows)
 
     def _avoid_line(self, avoid_markets: Any) -> str | None:
         avoid = [item for item in (avoid_markets or []) if isinstance(item, dict)]
@@ -103,3 +98,14 @@ def _compact(text: str, max_chars: int) -> str:
     if len(text) <= max_chars:
         return text
     return text[:max_chars].rsplit(" ", 1)[0].rstrip(" ,.;") + "."
+
+
+def _natural_join(items: list[str]) -> str:
+    cleaned = [item for item in items if item]
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return cleaned[0]
+    if len(cleaned) == 2:
+        return f"{cleaned[0]} ou {cleaned[1]}"
+    return f"{', '.join(cleaned[:-1])} ou {cleaned[-1]}"

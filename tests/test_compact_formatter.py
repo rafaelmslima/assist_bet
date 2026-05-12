@@ -27,11 +27,13 @@ class CompactFormatterTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Ideia geral:", text)
-        self.assertIn("Ideia de mercado:", text)
-        self.assertIn("Contexto:", text)
-        self.assertIn("Ideias alternativas:", text)
+        self.assertIn("A leitura aqui", text)
+        self.assertIn("Como ideia de mercado", text)
+        self.assertIn("O contexto pesa", text)
+        self.assertIn("Se quiser uma segunda leitura", text)
         self.assertIn("Arsenal: jogo de Champions League em 4 dias.", text)
+        self.assertNotIn("Ideia geral:", text)
+        self.assertNotIn("Ideias alternativas:", text)
         self.assertNotIn("value", text.lower())
         self.assertNotIn("odd", text.lower())
         self.assertLessEqual(len(text.splitlines()), 20)

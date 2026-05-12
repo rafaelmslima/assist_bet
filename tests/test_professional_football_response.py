@@ -23,10 +23,12 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
             }
         )
 
-        self.assertIn("Ideia geral:", text)
-        self.assertIn("Ideia de mercado: Over 1.5 gols", text)
-        self.assertIn("Riscos: confirmar escalacoes", text)
-        self.assertIn("Contexto:", text)
+        self.assertIn("A leitura aqui", text)
+        self.assertIn("Como ideia de mercado, eu olharia primeiro para Over 1.5 gols", text)
+        self.assertIn("O ponto de cuidado é confirmar escalacoes", text)
+        self.assertIn("O contexto pesa", text)
+        self.assertNotIn("Ideia geral:", text)
+        self.assertNotIn("Riscos:", text)
         self.assertNotIn("value", text.lower())
         self.assertNotIn("odd", text.lower())
 

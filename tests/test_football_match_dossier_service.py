@@ -52,7 +52,14 @@ class StructuredOpenAIClient:
                 "recent_form_read": "A forma do Arsenal parece mais confiavel que a do Chelsea.",
                 "key_risks": ["escalações ainda nao confirmadas"],
                 "betting_ideas": [
-                    {"market": "gols", "idea": "Over 1.5 gols", "confidence": "media", "reason": "roteiro favorece volume ofensivo."}
+                    {
+                        "market": "escanteios",
+                        "idea": "linha de escanteios",
+                        "projection": "8 a 10 escanteios",
+                        "projection_analysis": "o volume lateral dos times e o roteiro de pressao do Arsenal sustentam essa faixa.",
+                        "confidence": "media",
+                        "reason": "roteiro favorece pressão territorial e cruzamentos.",
+                    }
                 ],
                 "avoid": [{"market": "vencedor seco", "reason": "risco de transicao visitante."}],
                 "confidence": {"level": "amarela", "reason": "boa leitura, mas falta escalação."},
@@ -143,10 +150,14 @@ def test_ai_fallback_returns_script_and_market_ideas_without_price_language():
     )
 
     assert result["mode"] == "football_ai_fallback"
-    assert "Ideia geral:" in result["advisor_text"]
-    assert "Como deve ocorrer:" in result["advisor_text"]
-    assert "Ideias de apostas:" in result["advisor_text"]
-    assert "Confianca:" in result["advisor_text"]
+    assert "O jogo tende" in result["advisor_text"]
+    assert "Se o jogo abrir cedo" in result["advisor_text"]
+    assert "Como ideias de mercado" in result["advisor_text"]
+    assert "projeção de 8 a 10 escanteios" in result["advisor_text"]
+    assert "media combinada recente" in result["advisor_text"]
+    assert "A confiança fica" in result["advisor_text"]
+    assert "Ideia geral:" not in result["advisor_text"]
+    assert "Como deve ocorrer:" not in result["advisor_text"]
     assert "value" not in result["advisor_text"].lower()
     assert "odd" not in result["advisor_text"].lower()
 
@@ -157,9 +168,12 @@ def test_ai_structured_response_formats_script_before_betting_ideas():
 
     assert result["mode"] == "football_ai"
     text = result["advisor_text"]
-    assert text.index("Ideia geral:") < text.index("Ideias de apostas:")
-    assert "Como deve ocorrer:" in text
-    assert "Over 1.5 gols" in text
+    assert text.index("Arsenal deve propor") < text.index("Como ideias de mercado")
+    assert "Se o jogo abrir cedo" in text
+    assert "Ideias de apostas:" not in text
+    assert "linha de escanteios" in text
+    assert "projeção de 8 a 10 escanteios" in text
+    assert "volume lateral" in text
     assert "vencedor seco" in text
 
 
@@ -174,5 +188,5 @@ def test_ai_invalid_structured_response_uses_safe_fallback():
     )
 
     assert result["mode"] == "football_ai_fallback"
-    assert "Ideia geral:" in result["advisor_text"]
-    assert "Ideias de apostas:" in result["advisor_text"]
+    assert "A leitura aqui" in result["advisor_text"]
+    assert "Como ideia" in result["advisor_text"]

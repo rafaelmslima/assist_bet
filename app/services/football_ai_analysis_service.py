@@ -98,64 +98,192 @@ def _format_analysis(analysis: FootballAIAnalysis) -> str:
     lines = [
         analysis.fixture_label,
         "",
-        "Ideia geral:",
-        analysis.general_idea,
+        _opening_paragraph(analysis),
         "",
-        "Como deve ocorrer:",
-        f"- Inicio: {analysis.expected_script.start}",
-        f"- Desenvolvimento: {analysis.expected_script.middle}",
-        f"- Se sair gol cedo: {analysis.expected_script.if_early_goal}",
-        f"- Se chegar empatado no intervalo: {analysis.expected_script.if_level_at_halftime}",
+        _script_paragraph(analysis),
         "",
-        "Pontos-chave:",
+        _context_paragraph(analysis),
+        "",
+        _market_paragraph(analysis),
     ]
-    lines.extend(_matchup_lines(analysis.tactical_matchups))
-    if analysis.motivation_context:
-        lines.append(f"- Contexto/motivacao: {analysis.motivation_context}")
-    if analysis.recent_form_read:
-        lines.append(f"- Forma recente: {analysis.recent_form_read}")
-    lines.extend(f"- Risco: {risk}" for risk in analysis.key_risks[:4])
+    confidence_note = _confidence_note(analysis)
+    if confidence_note:
+        lines.extend(["", confidence_note])
+    return "\n".join(line for line in lines if line)
 
-    lines.extend(["", "Ideias de apostas:"])
-    lines.extend(_betting_idea_lines(analysis.betting_ideas))
-    lines.extend(["", "Evitaria:"])
-    lines.extend(_avoid_lines(analysis.avoid))
-    lines.extend(
-        [
-            "",
-            "Confianca:",
-            f"{analysis.confidence.level} - {analysis.confidence.reason}",
-            "",
-            "Antes de apostar:",
-        ]
+
+def _opening_paragraph(analysis: FootballAIAnalysis) -> str:
+    idea = _sentence(analysis.general_idea)
+    if idea.lower().startswith(("a leitura", "o jogo", "este jogo", "essa partida")):
+        return idea
+    return f"A leitura aqui é que {idea if idea else 'os dados ainda não deixam o jogo totalmente claro.'}"
+
+
+def _script_paragraph(analysis: FootballAIAnalysis) -> str:
+    script = analysis.expected_script
+    first = _sentence(script.start) or "O começo deve dar uma boa pista do ritmo real da partida."
+    middle = _sentence(script.middle)
+    early = _sentence(script.if_early_goal)
+    level = _sentence(script.if_level_at_halftime)
+
+    parts = [first]
+    if middle:
+        parts.append(middle)
+    if early or level:
+        scenario = []
+        if early:
+            scenario.append(f"Se o jogo abrir cedo, {early[0].lower() + early[1:]}")
+        if level:
+            scenario.append(f"se chegar empatado ao intervalo, {level[0].lower() + level[1:]}")
+        parts.append(" ".join(scenario))
+    return " ".join(parts)
+
+
+def _context_paragraph(analysis: FootballAIAnalysis) -> str:
+    matchup = _best_matchup_text(analysis)
+    context = _sentence(analysis.motivation_context)
+    form = _sentence(analysis.recent_form_read)
+    risk = _first_text(analysis.key_risks)
+
+    parts = []
+    if matchup:
+        parts.append(f"O ponto de atenção mais interessante é {matchup[0].lower() + matchup[1:]}")
+    if context:
+        parts.append(context)
+    if form:
+        parts.append(form)
+    if risk:
+        parts.append(f"Ainda assim, o risco principal é {risk[0].lower() + risk[1:]}")
+    return " ".join(parts) or "O ponto de atenção é que os dados ainda não mostram um encaixe forte o bastante para exagerar na convicção."
+
+
+def _market_paragraph(analysis: FootballAIAnalysis) -> str:
+    ideas = _market_ideas_text(analysis)
+    avoid = _avoid_text(analysis)
+    if ideas and avoid:
+        return f"Como ideias de mercado, eu olharia primeiro para {ideas}. Evitaria {avoid}."
+    if ideas:
+        return f"Como ideia de mercado, eu olharia primeiro para {ideas}, sem tratar isso como certeza."
+    if avoid:
+        return f"Eu não forçaria uma entrada clara aqui. Evitaria {avoid}."
+    return "Como ideia de mercado, eu trataria esse jogo mais como observação do que como entrada pré-jogo."
+
+
+def _confidence_note(analysis: FootballAIAnalysis) -> str:
+    reason = _sentence(analysis.confidence.reason)
+    checklist = _first_text(analysis.checklist_before_bet)
+    if analysis.confidence.level == "verde" and not checklist:
+        return ""
+    confidence = f"A confiança fica {analysis.confidence.level}"
+    if reason:
+        confidence += f" porque {reason[0].lower() + reason[1:]}"
+    if checklist:
+        confidence += f" Antes de apostar, eu confirmaria {checklist[0].lower() + checklist[1:]}."
+    return confidence
+
+
+def _best_matchup_text(analysis: FootballAIAnalysis) -> str:
+    for item in analysis.tactical_matchups:
+        title = _clean_text(item.title)
+        reading = _sentence(item.reading)
+        if title and reading:
+            return f"{title}: {reading}"
+        if reading:
+            return reading
+    return ""
+
+
+def _market_ideas_text(analysis: FootballAIAnalysis) -> str:
+    if not analysis.betting_ideas:
+        return ""
+    labels = []
+    for item in analysis.betting_ideas[:3]:
+        idea = _clean_text(item.idea) or _clean_text(item.market)
+        reason = _clean_text(item.reason)
+        projection = _projection_text(item)
+        if idea and projection and reason:
+            labels.append(f"{idea}, com {projection} ({reason})")
+        elif idea and projection:
+            labels.append(f"{idea}, com {projection}")
+        elif idea and reason:
+            labels.append(f"{idea} ({reason})")
+        elif idea:
+            labels.append(idea)
+    return _natural_join(labels)
+
+
+def _projection_text(item: Any) -> str:
+    projection = _clean_text(getattr(item, "projection", ""))
+    projection_analysis = _clean_text(getattr(item, "projection_analysis", ""))
+    if projection and projection_analysis:
+        return f"projeção de {projection}: {projection_analysis[0].lower() + projection_analysis[1:]}"
+    if projection:
+        return f"projeção de {projection}"
+    if _is_quantitative_prop(getattr(item, "market", ""), getattr(item, "idea", "")):
+        return "sem número confiável nos dados atuais; eu não transformaria isso em prop antes de ter uma linha melhor"
+    return ""
+
+
+def _is_quantitative_prop(*values: Any) -> bool:
+    text = " ".join(str(value or "").lower() for value in values)
+    keywords = (
+        "escanteio",
+        "canto",
+        "cantos",
+        "cartao",
+        "cartoes",
+        "finalizacao",
+        "finalizacoes",
+        "chute",
+        "chutes",
+        "desarme",
+        "desarmes",
+        "prop",
     )
-    lines.extend(f"- {item}" for item in (analysis.checklist_before_bet or ["confirmar dados finais do jogo"])[:4])
-
-    if analysis.data_quality_notes:
-        lines.extend(["", "Limitacoes dos dados:"])
-        lines.extend(f"- {item}" for item in analysis.data_quality_notes[:4])
-    return "\n".join(line for line in lines if line is not None)
+    return any(keyword in text for keyword in keywords)
 
 
-def _matchup_lines(matchups: list[Any]) -> list[str]:
-    if not matchups:
-        return ["- Sem matchup forte o bastante nos dados disponiveis."]
-    return [f"- {item.title}: {item.reading}" for item in matchups[:4]]
+def _avoid_text(analysis: FootballAIAnalysis) -> str:
+    if not analysis.avoid:
+        return ""
+    item = analysis.avoid[0]
+    market = _clean_text(item.market)
+    reason = _clean_text(item.reason)
+    if market and reason:
+        return f"{market}, porque {reason[0].lower() + reason[1:]}"
+    return market
 
 
-def _betting_idea_lines(ideas: list[Any]) -> list[str]:
-    if not ideas:
-        return ["1. Sem ideia forte - melhor tratar como jogo de observacao."]
-    rows = []
-    for index, item in enumerate(ideas[:4], start=1):
-        rows.append(f"{index}. {item.market} - {item.idea} | confianca {item.confidence}: {item.reason}")
-    return rows
+def _natural_join(items: list[str]) -> str:
+    cleaned = [item for item in items if item]
+    if not cleaned:
+        return ""
+    if len(cleaned) == 1:
+        return cleaned[0]
+    if len(cleaned) == 2:
+        return f"{cleaned[0]} ou {cleaned[1]}"
+    return f"{', '.join(cleaned[:-1])} ou {cleaned[-1]}"
 
 
-def _avoid_lines(avoid: list[Any]) -> list[str]:
-    if not avoid:
-        return ["- Forcar mercado sem confirmacao do roteiro."]
-    return [f"- {item.market}: {item.reason}" for item in avoid[:3]]
+def _first_text(items: list[str]) -> str:
+    for item in items:
+        cleaned = _clean_text(item)
+        if cleaned:
+            return cleaned
+    return ""
+
+
+def _sentence(value: Any) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    if text[-1] not in ".!?":
+        text += "."
+    return text
+
+
+def _clean_text(value: Any) -> str:
+    return " ".join(str(value or "").strip().split())
 
 
 def _local_general_idea(home: str, away: str, home_team: dict[str, Any], away_team: dict[str, Any]) -> str:
@@ -167,7 +295,7 @@ def _local_general_idea(home: str, away: str, home_team: dict[str, Any], away_te
         if away_goal >= home_goal + 0.35:
             return f"O {away} tem sinais para incomodar fora, entao o jogo nao parece simples para o mandante."
         return "Os dados apontam equilibrio razoavel, com leitura mais segura em roteiro de jogo do que em vencedor."
-    return "Ha dados parciais para montar uma leitura, mas nao o bastante para cravar um roteiro forte."
+    return "os dados sao parciais para montar a leitura, mas ainda nao bastam para cravar um roteiro forte."
 
 
 def _build_local_script(home: str, away: str, home_team: dict[str, Any], away_team: dict[str, Any]) -> dict[str, str]:
@@ -207,8 +335,23 @@ def _build_local_betting_ideas(home: str, away: str, home_team: dict[str, Any], 
         ideas.append({"market": "gol do visitante", "idea": f"{away} marcar", "confidence": "baixa", "reason": "ha sinal para resposta visitante, mas depende do roteiro e da escalação."})
     corner_avg = _to_float(corners.get("combined_team_corners_avg"))
     if corner_avg is not None and corner_avg >= 8:
-        ideas.append({"market": "escanteios", "idea": "olhar linha de escanteios", "confidence": "baixa", "reason": "amostra recente sugere volume lateral, mas precisa confirmar linha e estilo."})
+        ideas.append(
+            {
+                "market": "escanteios",
+                "idea": "olhar linha de escanteios",
+                "projection": _corner_projection(corner_avg),
+                "projection_analysis": f"a media combinada recente fica perto de {corner_avg:.1f}, entao eu trabalharia com uma faixa, nao com numero cravado.",
+                "confidence": "baixa",
+                "reason": "amostra recente sugere volume lateral, mas precisa confirmar linha e estilo.",
+            }
+        )
     return ideas[:4] or [{"market": "sem mercado claro", "idea": "jogo para observacao", "confidence": "baixa", "reason": "os dados nao sustentam uma ideia qualitativa forte."}]
+
+
+def _corner_projection(corner_avg: float) -> str:
+    low = max(0, round(corner_avg - 1))
+    high = max(low + 1, round(corner_avg + 1))
+    return f"{low} a {high} escanteios"
 
 
 def _recent_form_read(home: str, away: str, home_team: dict[str, Any], away_team: dict[str, Any]) -> str:

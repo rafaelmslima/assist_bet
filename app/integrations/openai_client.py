@@ -45,6 +45,7 @@ class OpenAIClient:
             "- Se ha risco de rotacao, baixa motivacao ou calendario pesado.\n"
             "- Se desfalques ou escalacoes afetam ataque, defesa, criacao ou bola parada.\n"
             "- Quais mercados combinam com o roteiro: gols, ambas marcam, gol de um time, escanteios, cartoes ou evitar vencedor seco.\n"
+            "- Se citar escanteios, cartoes, finalizacoes ou qualquer prop quantitativa, informe uma previsao numerica ou faixa provavel e explique por que esse numero faz sentido pelo tipo de jogo dos times.\n"
             "- Quais mercados devem ser evitados.\n\n"
             "Regras:\n"
             "- Nao diga value, odd justa, edge, odd minima ou entrada confirmada.\n"
@@ -52,6 +53,9 @@ class OpenAIClient:
             "- Se os dados forem fracos, diga claramente que a confianca e baixa.\n"
             "- Nao prometa lucro.\n"
             "- Nao crie certeza onde existe incerteza.\n"
+            "- Nunca cite uma prop quantitativa so como nome de mercado; ela precisa vir com projection e projection_analysis.\n"
+            "- Escreva os campos como um analista falando com o usuario, em portugues natural, sem parecer formulario.\n"
+            "- Evite frases soltas e telegráficas; conecte causa e efeito em frases conversadas.\n"
             "- Prefira uma leitura util, objetiva e natural para Telegram.\n\n"
             "Responda somente com JSON valido, sem markdown, neste schema:\n"
             "{\n"
@@ -67,7 +71,7 @@ class OpenAIClient:
             '  "motivation_context": "Leitura de tabela, calendario, objetivo e possivel rotacao.",\n'
             '  "recent_form_read": "Se a forma recente parece forte, fraca ou enganosa.",\n'
             '  "key_risks": ["Risco 1", "Risco 2"],\n'
-            '  "betting_ideas": [{"market": "Mercado sugerido", "idea": "Ideia qualitativa", "confidence": "baixa", "reason": "Motivo curto"}],\n'
+            '  "betting_ideas": [{"market": "Mercado sugerido", "idea": "Ideia qualitativa", "projection": "Ex: 8 a 10 escanteios, 4 a 6 cartoes ou 2 a 3 finalizacoes", "projection_analysis": "Por que essa faixa faz sentido pelos dados e roteiro", "confidence": "baixa", "reason": "Motivo curto"}],\n'
             '  "avoid": [{"market": "Mercado a evitar", "reason": "Motivo curto"}],\n'
             '  "confidence": {"level": "amarela", "reason": "Motivo da confianca geral"},\n'
             '  "checklist_before_bet": ["O que confirmar antes de apostar"],\n'

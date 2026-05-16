@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.database.models import AnalysisCard, Bet, OddsSnapshot, Recommendation, User, utc_now
+from app.database.models import AnalysisCard, Bet, OddsSnapshot, Recommendation, User, WebUser, utc_now
 from app.schemas.bet import BetCreate
 
 
@@ -222,6 +222,35 @@ def save_analysis_card(
 def get_user_by_telegram_id(db: Session, telegram_user_id: int) -> User | None:
     statement = select(User).where(User.telegram_user_id == telegram_user_id)
     return db.scalar(statement)
+
+
+def get_web_user_by_email(db: Session, email: str) -> WebUser | None:
+    statement = select(WebUser).where(WebUser.email == email.lower().strip())
+    return db.scalar(statement)
+
+
+def get_web_user_by_id(db: Session, user_id: int) -> WebUser | None:
+    return db.get(WebUser, user_id)
+
+
+def create_web_user(
+    db: Session,
+    *,
+    email: str,
+    password_hash: str,
+    role: str = "admin",
+    is_active: bool = True,
+) -> WebUser:
+    user = WebUser(
+        email=email.lower().strip(),
+        password_hash=password_hash,
+        role=role,
+        is_active=is_active,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def save_model(db: Session, model_data: Any) -> Any:

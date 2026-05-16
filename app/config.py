@@ -52,6 +52,9 @@ class Settings:
     bot_analysis_style: str = os.getenv("BOT_ANALYSIS_STYLE", "advisor")
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    web_secret_key: str = os.getenv("WEB_SECRET_KEY", "dev-insecure-change-me-please-32-bytes")
+    web_session_cookie_name: str = os.getenv("WEB_SESSION_COOKIE_NAME", "assist_bet_session")
+    web_session_expire_minutes: int = int(os.getenv("WEB_SESSION_EXPIRE_MINUTES", "10080"))
 
     @property
     def is_production(self) -> bool:

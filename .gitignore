@@ -17,6 +17,10 @@ venv/
 .venv/
 env/
 
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
 # Local databases and runtime files
 *.db
 *.sqlite

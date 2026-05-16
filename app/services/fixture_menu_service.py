@@ -78,11 +78,14 @@ class FixtureMenuService:
         return self.get_fixtures_for_day(league_key, day_offset=1)
 
     def get_fixtures_for_day(self, league_key: str, day_offset: int = 0) -> dict[str, Any]:
+        target_date = (datetime.now(SAO_PAULO_TZ).date() + timedelta(days=day_offset)).isoformat()
+        return self.get_fixtures_for_date(league_key, target_date)
+
+    def get_fixtures_for_date(self, league_key: str, target_date: str) -> dict[str, Any]:
         league = self.get_league(league_key)
         if league is None:
             return {"ok": False, "error": "Liga não encontrada.", "fixtures": [], "league": None}
 
-        target_date = (datetime.now(SAO_PAULO_TZ).date() + timedelta(days=day_offset)).isoformat()
         response = _cached_call(
             "api_football.fixtures_by_league_date",
             180,

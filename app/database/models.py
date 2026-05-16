@@ -40,6 +40,16 @@ class User(Base, TimestampMixin):
     )
 
 
+class WebUser(Base, TimestampMixin):
+    __tablename__ = "web_users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(50), default="admin", index=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+
+
 class Team(Base, TimestampMixin):
     __tablename__ = "teams"
     __table_args__ = (UniqueConstraint("sport", "external_id", name="uq_teams_sport_external_id"),)

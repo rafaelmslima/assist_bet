@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import unittest
 
-from app.bot import fixture_callbacks
 from app.services.fixture_menu_service import FixtureMenuService, LeagueConfig
 
 
@@ -57,17 +56,12 @@ class FixtureLeagueFilterTest(unittest.TestCase):
         self.assertNotIn("la_liga", today_keys)
         self.assertIn("la_liga", tomorrow_keys)
 
-    def test_no_leagues_returns_clear_empty_keyboard(self) -> None:
+    def test_no_leagues_returns_empty_list(self) -> None:
         class EmptyFixtureMenuService(FakeFixtureMenuService):
             def get_fixtures_for_day(self, league_key: str, day_offset: int = 0) -> dict:
                 return {"ok": True, "fixtures": [], "league": self.get_league(league_key)}
 
-        keyboard = fixture_callbacks._build_league_keyboard(
-            EmptyFixtureMenuService(),
-            prefix=fixture_callbacks.LEAGUE_PREFIX,
-            day_offset=0,
-        )
-        self.assertIsNone(keyboard)
+        self.assertEqual(EmptyFixtureMenuService().get_leagues_with_fixtures(day_offset=0), [])
 
 
 if __name__ == "__main__":

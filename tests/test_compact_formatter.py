@@ -2,12 +2,12 @@
 
 import unittest
 
-from app.bot.formatters import format_bet_advisor_response
+from app.services.football_response_service import FootballResponseService
 
 
 class CompactFormatterTest(unittest.TestCase):
     def test_formatter_returns_qualitative_analysis_response(self) -> None:
-        text = format_bet_advisor_response(
+        text = FootballResponseService().format_advice(
             {
                 "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
                 "main_recommendation": {
@@ -39,7 +39,7 @@ class CompactFormatterTest(unittest.TestCase):
         self.assertLessEqual(len(text.splitlines()), 20)
 
     def test_formatter_keeps_context_for_player_recommendation(self) -> None:
-        text = format_bet_advisor_response(
+        text = FootballResponseService().format_advice(
             {
                 "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
                 "main_recommendation": {
@@ -61,7 +61,7 @@ class CompactFormatterTest(unittest.TestCase):
         self.assertIn("Chelsea: meio de tabela.", text)
 
     def test_formatter_shows_competitive_status_objectively(self) -> None:
-        text = format_bet_advisor_response(
+        text = FootballResponseService().format_advice(
             {
                 "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
                 "main_recommendation": {

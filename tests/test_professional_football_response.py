@@ -2,12 +2,12 @@
 
 import unittest
 
-from app.bot.formatters import format_bet_advisor_response
+from app.services.football_response_service import FootballResponseService
 
 
 class ProfessionalFootballResponseTest(unittest.TestCase):
     def test_response_centers_game_reading_and_market_ideas(self) -> None:
-        text = format_bet_advisor_response(
+        text = FootballResponseService().format_advice(
             {
                 "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
                 "main_recommendation": {
@@ -33,7 +33,7 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
         self.assertNotIn("odd", text.lower())
 
     def test_avoid_response_is_explicit(self) -> None:
-        text = format_bet_advisor_response(
+        text = FootballResponseService().format_advice(
             {
                 "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
                 "main_recommendation": {
@@ -51,7 +51,7 @@ class ProfessionalFootballResponseTest(unittest.TestCase):
         self.assertIn("vencedor seco", text.lower())
 
     def test_response_keeps_competitive_status_with_direct_language(self) -> None:
-        text = format_bet_advisor_response(
+        text = FootballResponseService().format_advice(
             {
                 "fixture": {"home_team": "Arsenal", "away_team": "Chelsea"},
                 "main_recommendation": {

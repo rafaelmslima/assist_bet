@@ -1,1 +1,1 @@
-"""Sports Betting Assistant application package."""
+"""Assist Bet dashboard application package."""

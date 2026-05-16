@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -20,23 +20,6 @@ class TimestampMixin:
         DateTime,
         default=utc_now,
         onupdate=utc_now,
-    )
-
-
-class User(Base, TimestampMixin):
-    __tablename__ = "users"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
-    chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
-    first_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-
-    bets: Mapped[list[Bet]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    analysis_cards: Mapped[list[AnalysisCard]] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan",
     )
 
 
@@ -128,10 +111,6 @@ class Fixture(Base, TimestampMixin):
         back_populates="fixture",
         cascade="all, delete-orphan",
     )
-    analysis_cards: Mapped[list[AnalysisCard]] = relationship(
-        back_populates="fixture",
-        cascade="all, delete-orphan",
-    )
 
 
 class TeamStatsSnapshot(Base):
@@ -190,46 +169,6 @@ class OddsSnapshot(Base):
     collected_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, index=True)
 
     fixture: Mapped[Fixture] = relationship(back_populates="odds_snapshots")
-
-
-class AnalysisCard(Base):
-    __tablename__ = "analysis_cards"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    fixture_id: Mapped[int] = mapped_column(ForeignKey("fixtures.id"), index=True)
-    summary: Mapped[str] = mapped_column(Text)
-    strengths: Mapped[str | None] = mapped_column(Text, nullable=True)
-    weaknesses: Mapped[str | None] = mapped_column(Text, nullable=True)
-    context_alerts: Mapped[str | None] = mapped_column(Text, nullable=True)
-    suggested_markets: Mapped[str | None] = mapped_column(Text, nullable=True)
-    risk_level: Mapped[str] = mapped_column(String(50), index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
-
-    user: Mapped[User] = relationship(back_populates="analysis_cards")
-    fixture: Mapped[Fixture] = relationship(back_populates="analysis_cards")
-
-
-class Bet(Base):
-    __tablename__ = "bets"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
-    sport: Mapped[str] = mapped_column(String(50), index=True)
-    league: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
-    fixture_name: Mapped[str] = mapped_column(String(255))
-    market: Mapped[str] = mapped_column(String(100), index=True)
-    selection: Mapped[str] = mapped_column(String(255))
-    odd: Mapped[float] = mapped_column(Float)
-    stake: Mapped[float] = mapped_column(Float)
-    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(30), default="open", index=True)
-    result: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
-    profit_loss: Mapped[float | None] = mapped_column(Float, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
-    settled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    user: Mapped[User] = relationship(back_populates="bets")
 
 
 class Recommendation(Base):

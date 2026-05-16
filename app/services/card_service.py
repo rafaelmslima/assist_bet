@@ -10,7 +10,7 @@ INSUFFICIENT_DATA = "dados insuficientes"
 
 
 class CardService:
-    """Generates Telegram-ready football context cards."""
+    """Generates compact football context cards for the dashboard."""
 
     def __init__(self, analysis_service: AnalysisService | None = None) -> None:
         self.analysis_service = analysis_service or AnalysisService()

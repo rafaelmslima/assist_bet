@@ -56,7 +56,7 @@ class OpenAIClient:
             "- Nunca cite uma prop quantitativa so como nome de mercado; ela precisa vir com projection e projection_analysis.\n"
             "- Escreva os campos como um analista falando com o usuario, em portugues natural, sem parecer formulario.\n"
             "- Evite frases soltas e telegráficas; conecte causa e efeito em frases conversadas.\n"
-            "- Prefira uma leitura util, objetiva e natural para Telegram.\n\n"
+            "- Prefira uma leitura util, objetiva e natural para dashboard.\n\n"
             "Responda somente com JSON valido, sem markdown, neste schema:\n"
             "{\n"
             '  "fixture_label": "Time A x Time B",\n'
@@ -94,11 +94,11 @@ class OpenAIClient:
         if not self.api_key:
             return None
         system_prompt = (
-            "Voce e um analista de futebol pre-jogo. Transforme o JSON recebido em uma resposta curta para Telegram. "
+            "Voce e um analista de futebol pre-jogo. Transforme o JSON recebido em uma resposta curta para dashboard. "
             "Use apenas os dados recebidos, sem inventar contexto. Fale em roteiro do jogo, riscos e ideias qualitativas de mercados. "
             "Nao mencione value, edge, odd justa, odd minima ou entrada confirmada."
         )
-        user_prompt = f"Explique este JSON em formato curto para Telegram:\n{json.dumps(recommendation, ensure_ascii=False)}"
+        user_prompt = f"Explique este JSON em formato curto para dashboard:\n{json.dumps(recommendation, ensure_ascii=False)}"
         payload = {
             "model": self.model,
             "messages": [

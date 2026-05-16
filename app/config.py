@@ -34,7 +34,6 @@ def _migrate_on_startup_from_env() -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    telegram_bot_token: str | None = os.getenv("TELEGRAM_BOT_TOKEN")
     database_url: str = _database_url_from_env()
 
     api_football_key: str | None = os.getenv("API_FOOTBALL_KEY")

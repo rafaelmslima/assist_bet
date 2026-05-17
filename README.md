@@ -123,10 +123,16 @@ O processo web sobe com:
 uvicorn app.web.main:app --host 0.0.0.0 --port $PORT
 ```
 
-Crie o primeiro usuario no ambiente de producao com:
+O unico usuario admin permitido e `rafaelmslima.miranda2@gmail.com`. Crie usuarios comuns com:
 
 ```powershell
-python -m app.web.create_user --email admin@example.com
+python -m app.web.user_admin create --email usuario@example.com
+```
+
+Troque a senha de um usuario existente com:
+
+```powershell
+python -m app.web.user_admin password --email rafaelmslima.miranda2@gmail.com
 ```
 
 ## Testes E Validacao

@@ -38,6 +38,13 @@ def create_web_user(
     return user
 
 
+def update_web_user_password(db: Session, user: WebUser, password_hash: str) -> WebUser:
+    user.password_hash = password_hash
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def save_odds_snapshot(
     db: Session,
     *,

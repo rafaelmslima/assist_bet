@@ -1,4 +1,5 @@
 export type User = { id: number; email: string; role: string };
+export type AdminUser = User;
 
 export type League = { key: string; label: string; league_id: number; season: number };
 

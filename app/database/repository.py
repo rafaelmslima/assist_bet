@@ -18,6 +18,11 @@ def get_web_user_by_id(db: Session, user_id: int) -> WebUser | None:
     return db.get(WebUser, user_id)
 
 
+def list_web_users(db: Session) -> list[WebUser]:
+    statement = select(WebUser).order_by(WebUser.role, WebUser.email)
+    return list(db.scalars(statement))
+
+
 def create_web_user(
     db: Session,
     *,

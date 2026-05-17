@@ -5,14 +5,16 @@ import {
   CalendarDays,
   ChevronRight,
   Clock,
+  KeyRound,
   LogOut,
   RefreshCw,
   Search,
   Shield,
+  UserPlus,
   Users
 } from "lucide-react";
 import { api } from "./api";
-import { AnalysisPayload, Fixture, FixtureList, League, Tab, User, tabs } from "./types";
+import { AdminUser, AnalysisPayload, Fixture, FixtureList, League, Tab, User, tabs } from "./types";
 
 export function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -95,6 +97,7 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [loadingFixtures, setLoadingFixtures] = useState(false);
   const [loadingAnalysis, setLoadingAnalysis] = useState(false);
   const [error, setError] = useState("");
+  const [view, setView] = useState<"fixtures" | "users">("fixtures");
 
   useEffect(() => {
     api<League[]>("/api/leagues")
@@ -155,7 +158,7 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
   const currentLeague = useMemo(() => leagues.find((item) => item.key === selectedLeague), [leagues, selectedLeague]);
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell ${view === "users" ? "users-mode" : ""}`}>
       <aside className="sidebar">
         <div className="sidebar-top">
           <div className="brand-row">
@@ -168,6 +171,20 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
         </div>
 
         <section className="filters">
+          {user.role === "admin" && (
+            <div className="sidebar-actions">
+              <button className={view === "fixtures" ? "secondary-button active" : "secondary-button"} onClick={() => setView("fixtures")} type="button">
+                <CalendarDays size={16} />
+                Jogos
+              </button>
+              <button className={view === "users" ? "secondary-button active" : "secondary-button"} onClick={() => setView("users")} type="button">
+                <Users size={16} />
+                Usuarios
+              </button>
+            </div>
+          )}
+          {view === "fixtures" && (
+          <>
           <label>
             Liga
             <select value={selectedLeague} onChange={(event) => setSelectedLeague(event.target.value)}>
@@ -189,6 +206,8 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
             <RefreshCw size={16} />
             Atualizar
           </button>
+          </>
+          )}
         </section>
 
         <div className="user-strip">
@@ -197,6 +216,7 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
         </div>
       </aside>
 
+      {view === "fixtures" && (
       <section className="fixture-column">
         <header className="column-header">
           <div>
@@ -227,8 +247,12 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
           ))}
         </div>
       </section>
+      )}
 
       <section className="detail-column">
+        {view === "users" && user.role === "admin" && <AdminUsersPanel currentUser={user} />}
+        {view === "fixtures" && (
+        <>
         {error && (
           <div className="alert-line">
             <AlertTriangle size={18} />
@@ -267,8 +291,140 @@ function Dashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
             {!loadingAnalysis && analysis && <DetailTab activeTab={activeTab} payload={analysis} />}
           </>
         )}
+        </>
+        )}
       </section>
     </main>
+  );
+}
+
+function AdminUsersPanel({ currentUser }: { currentUser: User }) {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [email, setEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwords, setPasswords] = useState<Record<number, string>>({});
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  async function loadUsers() {
+    setLoading(true);
+    setError("");
+    try {
+      setUsers(await api<AdminUser[]>("/api/admin/users"));
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "Falha ao carregar usuarios.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createUser(event: FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    try {
+      const created = await api<AdminUser>("/api/admin/users", {
+        method: "POST",
+        body: JSON.stringify({ email, password: newPassword })
+      });
+      setUsers((items) => [...items, created].sort((a, b) => a.email.localeCompare(b.email)));
+      setEmail("");
+      setNewPassword("");
+      setMessage(`Usuario ${created.email} criado.`);
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "Falha ao criar usuario.");
+    }
+  }
+
+  async function changePassword(target: AdminUser) {
+    const password = passwords[target.id] || "";
+    setMessage("");
+    setError("");
+    try {
+      const updated = await api<AdminUser>(`/api/admin/users/${target.id}/password`, {
+        method: "PUT",
+        body: JSON.stringify({ password })
+      });
+      setUsers((items) => items.map((item) => (item.id === updated.id ? updated : item)));
+      setPasswords((items) => ({ ...items, [target.id]: "" }));
+      setMessage(`Senha alterada para ${updated.email}.`);
+    } catch (exc) {
+      setError(exc instanceof Error ? exc.message : "Falha ao alterar senha.");
+    }
+  }
+
+  return (
+    <div className="admin-panel">
+      <header className="detail-header">
+        <div>
+          <p>Administracao</p>
+          <h2>Usuarios</h2>
+        </div>
+        <span className="status-pill">{users.length}</span>
+      </header>
+
+      <div className="admin-content">
+        {error && (
+          <div className="alert-line compact">
+            <AlertTriangle size={18} />
+            <span>{error}</span>
+          </div>
+        )}
+        {message && <p className="success-line">{message}</p>}
+
+        <form className="admin-form" onSubmit={createUser}>
+          <h3>Novo usuario</h3>
+          <label>
+            Email
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+          </label>
+          <label>
+            Senha inicial
+            <input value={newPassword} onChange={(event) => setNewPassword(event.target.value)} type="password" minLength={8} required />
+          </label>
+          <button className="primary-button" type="submit">
+            <UserPlus size={16} />
+            Criar usuario
+          </button>
+        </form>
+
+        <section className="users-table">
+          <div className="users-table-head">
+            <span>Email</span>
+            <span>Perfil</span>
+            <span>Nova senha</span>
+          </div>
+          {loading && <StateLine icon={<Clock size={18} />} text="Carregando usuarios..." />}
+          {!loading &&
+            users.map((item) => (
+              <div className="user-row" key={item.id}>
+                <div>
+                  <strong>{item.email}</strong>
+                  {item.id === currentUser.id && <span>voce</span>}
+                </div>
+                <span className="role-pill">{item.role}</span>
+                <div className="password-action">
+                  <input
+                    aria-label={`Nova senha para ${item.email}`}
+                    minLength={8}
+                    type="password"
+                    value={passwords[item.id] || ""}
+                    onChange={(event) => setPasswords((values) => ({ ...values, [item.id]: event.target.value }))}
+                  />
+                  <button className="icon-button bordered" disabled={(passwords[item.id] || "").length < 8} onClick={() => changePassword(item)} title="Alterar senha" type="button">
+                    <KeyRound size={17} />
+                  </button>
+                </div>
+              </div>
+            ))}
+        </section>
+      </div>
+    </div>
   );
 }
 

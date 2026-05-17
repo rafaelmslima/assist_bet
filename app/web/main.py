@@ -12,12 +12,14 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database.models import WebUser
-from app.database.repository import get_web_user_by_email
+from app.database.repository import create_web_user, get_web_user_by_email, get_web_user_by_id, list_web_users, update_web_user_password
 from app.database.session import engine, init_db, run_migrations
 from app.services.cache_service import cache_key, default_cache
 from app.services.fixture_menu_service import FixtureMenuService, SAO_PAULO_TZ
 from app.web.dependencies import current_web_user, get_db_session
 from app.web.schemas import (
+    ChangeUserPasswordRequest,
+    CreateUserRequest,
     FixtureAnalysisResponse,
     FixtureListResponse,
     LeagueRead,
@@ -26,7 +28,8 @@ from app.web.schemas import (
     TextPanelResponse,
     WebUserRead,
 )
-from app.web.security import LoginRateLimiter, create_session_token, verify_password
+from app.web.security import LoginRateLimiter, create_session_token, hash_password, verify_password
+from app.web.user_admin import ADMIN_EMAIL, DEFAULT_USER_ROLE
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -60,6 +63,20 @@ def _service() -> FixtureMenuService:
 
 def _user_read(user: WebUser) -> WebUserRead:
     return WebUserRead(id=user.id, email=user.email, role=user.role)
+
+
+def _require_admin(user: WebUser) -> None:
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso restrito a administradores.")
+
+
+def _validate_password(password: str) -> None:
+    if len(password) < 8:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="A senha deve ter pelo menos 8 caracteres.")
+
+
+def _role_for_email(email: str) -> str:
+    return "admin" if email.lower().strip() == ADMIN_EMAIL else DEFAULT_USER_ROLE
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
@@ -114,6 +131,47 @@ def logout(response: Response) -> dict[str, bool]:
 @app.get("/api/me", response_model=WebUserRead)
 def me(user: WebUser = Depends(current_web_user)) -> WebUserRead:
     return _user_read(user)
+
+
+@app.get("/api/admin/users", response_model=list[WebUserRead])
+def admin_list_users(user: WebUser = Depends(current_web_user), db: Session = Depends(get_db_session)) -> list[WebUserRead]:
+    _require_admin(user)
+    return [_user_read(item) for item in list_web_users(db)]
+
+
+@app.post("/api/admin/users", response_model=WebUserRead, status_code=status.HTTP_201_CREATED)
+def admin_create_user(
+    payload: CreateUserRequest,
+    user: WebUser = Depends(current_web_user),
+    db: Session = Depends(get_db_session),
+) -> WebUserRead:
+    _require_admin(user)
+    _validate_password(payload.password)
+    email = payload.email.lower().strip()
+    if get_web_user_by_email(db, email):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Usuario ja existe.")
+    created = create_web_user(
+        db,
+        email=email,
+        password_hash=hash_password(payload.password),
+        role=_role_for_email(email),
+    )
+    return _user_read(created)
+
+
+@app.put("/api/admin/users/{user_id}/password", response_model=WebUserRead)
+def admin_change_user_password(
+    user_id: int,
+    payload: ChangeUserPasswordRequest,
+    user: WebUser = Depends(current_web_user),
+    db: Session = Depends(get_db_session),
+) -> WebUserRead:
+    _require_admin(user)
+    _validate_password(payload.password)
+    target = get_web_user_by_id(db, user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario nao encontrado.")
+    return _user_read(update_web_user_password(db, target, hash_password(payload.password)))
 
 
 @app.get("/api/leagues", response_model=list[LeagueRead])
@@ -194,8 +252,7 @@ def fixture_injuries(fixture_id: str, _: WebUser = Depends(current_web_user)) ->
 
 @app.get("/api/status", response_model=StatusResponse)
 def api_status(user: WebUser = Depends(current_web_user)) -> StatusResponse:
-    if user.role != "admin":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso restrito a administradores.")
+    _require_admin(user)
     return StatusResponse(
         environment=settings.environment,
         database=engine.url.drivername,

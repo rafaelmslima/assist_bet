@@ -16,6 +16,15 @@ class WebUserRead(BaseModel):
     role: str
 
 
+class CreateUserRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class ChangeUserPasswordRequest(BaseModel):
+    password: str
+
+
 class LeagueRead(BaseModel):
     key: str
     label: str

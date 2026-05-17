@@ -32,6 +32,12 @@ class WebAuthTest(unittest.TestCase):
                 password_hash=hash_password("secret123"),
                 role="admin",
             )
+            create_web_user(
+                db,
+                email="user@example.com",
+                password_hash=hash_password("secret123"),
+                role="user",
+            )
 
         def override_db():
             db = self.Session()
@@ -80,6 +86,37 @@ class WebAuthTest(unittest.TestCase):
             json={"email": "admin@example.com", "password": "wrong-password"},
         )
         self.assertEqual(blocked.status_code, 429)
+
+    def test_admin_can_create_user_and_change_password(self) -> None:
+        self.client.post("/api/auth/login", json={"email": "admin@example.com", "password": "secret123"})
+
+        create_response = self.client.post(
+            "/api/admin/users",
+            json={"email": "new-user@example.com", "password": "initial123"},
+        )
+        self.assertEqual(create_response.status_code, 201)
+        created = create_response.json()
+        self.assertEqual(created["role"], "user")
+
+        password_response = self.client.put(
+            f"/api/admin/users/{created['id']}/password",
+            json={"password": "changed123"},
+        )
+        self.assertEqual(password_response.status_code, 200)
+
+        self.client.post("/api/auth/logout")
+        login_response = self.client.post(
+            "/api/auth/login",
+            json={"email": "new-user@example.com", "password": "changed123"},
+        )
+        self.assertEqual(login_response.status_code, 200)
+
+    def test_common_user_cannot_manage_users(self) -> None:
+        self.client.post("/api/auth/login", json={"email": "user@example.com", "password": "secret123"})
+
+        response = self.client.get("/api/admin/users")
+
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":

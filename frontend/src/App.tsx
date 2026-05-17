@@ -489,7 +489,7 @@ function DetailTab({ activeTab, payload }: { activeTab: Tab; payload: AnalysisPa
   }
   if (activeTab === "Escalacoes") {
     const lineups = readPath(payload.dossier, ["lineups"]);
-    return <JsonBlock data={lineups || { status: "Escalacoes indisponiveis." }} />;
+    return <LineupBoard data={lineups} />;
   }
   if (activeTab === "Desfalques") {
     return <TextBlock text={payload.injuries_text || "Desfalques indisponiveis."} />;
@@ -508,6 +508,62 @@ function JsonBlock({ data }: { data: unknown }) {
   return <pre className="json-block">{JSON.stringify(data, null, 2)}</pre>;
 }
 
+function LineupBoard({ data }: { data: unknown }) {
+  const lineups = normalizeLineups(data);
+  if (lineups.length === 0) {
+    return <TextBlock text="Escalacoes indisponiveis." />;
+  }
+
+  const home = lineups[0];
+  const away = lineups[1];
+  return (
+    <div className="lineup-shell">
+      <div className="lineup-summary">
+        <strong>{home?.team || "Mandante"}</strong>
+        <span>{home?.formation || "-"}</span>
+        {away && (
+          <>
+            <span>x</span>
+            <span>{away.formation || "-"}</span>
+            <strong>{away.team || "Visitante"}</strong>
+          </>
+        )}
+      </div>
+      <div className="pitch">
+        <div className="pitch-box top" />
+        <div className="pitch-circle" />
+        <div className="pitch-box bottom" />
+        {home && <TeamLineup team={home} side="home" />}
+        {away && <TeamLineup team={away} side="away" />}
+      </div>
+      {data && typeof data === "object" && "confirmed" in data && !Boolean((data as Record<string, unknown>).confirmed) && (
+        <p className="lineup-note">Escalacao ainda nao confirmada pela API.</p>
+      )}
+    </div>
+  );
+}
+
+function TeamLineup({ team, side }: { team: NormalizedLineup; side: "home" | "away" }) {
+  const rows = buildLineupRows(team.starters, team.formation, side);
+  return (
+    <>
+      {rows.map((row, rowIndex) =>
+        row.players.map((player, playerIndex) => (
+          <div
+            className={`player-dot ${side}`}
+            key={`${side}-${rowIndex}-${playerIndex}-${player}`}
+            style={{ left: `${positionX(playerIndex, row.players.length)}%`, top: `${row.top}%` }}
+            title={player}
+          >
+            <span>{initials(player)}</span>
+            <small>{shortName(player)}</small>
+          </div>
+        ))
+      )}
+    </>
+  );
+}
+
 function StateLine({ icon, text }: { icon: ReactNode; text: string }) {
   return (
     <div className="state-line">
@@ -515,6 +571,70 @@ function StateLine({ icon, text }: { icon: ReactNode; text: string }) {
       <span>{text}</span>
     </div>
   );
+}
+
+type NormalizedLineup = { team: string; formation: string; starters: string[] };
+
+function normalizeLineups(data: unknown): NormalizedLineup[] {
+  if (!data || typeof data !== "object") return [];
+  const teams = (data as Record<string, unknown>).teams;
+  if (!Array.isArray(teams)) return [];
+  return teams
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const source = item as Record<string, unknown>;
+      const starters = Array.isArray(source.starters) ? source.starters.filter((name): name is string => typeof name === "string") : [];
+      return {
+        team: typeof source.team === "string" ? source.team : "",
+        formation: typeof source.formation === "string" ? source.formation : "",
+        starters
+      };
+    })
+    .filter((item): item is NormalizedLineup => Boolean(item && item.starters.length));
+}
+
+function buildLineupRows(starters: string[], formation: string, side: "home" | "away") {
+  const lines = formation
+    .split("-")
+    .map((item) => Number.parseInt(item, 10))
+    .filter((item) => Number.isFinite(item) && item > 0);
+  const shape = lines.length ? [1, ...lines] : [1, 4, 3, 3];
+  const players = starters.slice(0, 11);
+  const rows: Array<{ top: number; players: string[] }> = [];
+  let cursor = 0;
+  const tops = side === "home" ? [8, 20, 34, 47, 58] : [92, 80, 66, 53, 42];
+  shape.forEach((count, index) => {
+    const rowPlayers = players.slice(cursor, cursor + count);
+    cursor += count;
+    if (rowPlayers.length) {
+      rows.push({ top: tops[index] ?? (side === "home" ? 58 : 42), players: rowPlayers });
+    }
+  });
+  const remaining = players.slice(cursor);
+  if (remaining.length) {
+    rows.push({ top: side === "home" ? 58 : 42, players: remaining });
+  }
+  return rows;
+}
+
+function positionX(index: number, total: number) {
+  if (total <= 1) return 50;
+  const padding = total >= 4 ? 14 : 24;
+  return padding + (index * (100 - padding * 2)) / (total - 1);
+}
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function shortName(name: string) {
+  const parts = name.split(/\s+/).filter(Boolean);
+  return parts.length > 1 ? parts[parts.length - 1] : name;
 }
 
 function formatFixtureMeta(fixture: Fixture) {

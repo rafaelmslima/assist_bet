@@ -124,6 +124,15 @@ def test_dossier_contains_context_and_qualitative_market_targets():
     )
 
     assert dossier["fixture"]["home_team"] == "Arsenal"
+    assert dossier["schema_version"] == "football_ai_dossier_v2"
+    assert dossier["match"]["competition"] == "Premier League"
+    assert dossier["data_quality"]["lineups_available"] is False
+    assert "confidence_penalty" in dossier["data_quality"]
+    assert dossier["home_team_profile"]["attack"]["goals_per_game"] == 1.9
+    assert dossier["away_team_profile"]["defense"]["goals_against_per_game"] == 1.5
+    assert dossier["matchup_analysis"]["home_attack_vs_away_defense"]["signal"] == "forte pro-mandante marcar"
+    assert dossier["market_scores"]["home_team_goal"]["score"] >= 50
+    assert dossier["odds_analysis"]["available"] is False
     assert "Chelsea: jogo de Champions League em 4 dias." in dossier["competitive_context"]["summary_lines"]
     assert dossier["corners_context"]["home"]["avg_for"] == 6.0
     assert "odds" not in dossier

@@ -536,9 +536,9 @@ function LineupBoard({ data }: { data: unknown }) {
         {home && <TeamLineup team={home} side="home" />}
         {away && <TeamLineup team={away} side="away" />}
       </div>
-      {data && typeof data === "object" && "confirmed" in data && !Boolean((data as Record<string, unknown>).confirmed) && (
+      {data && typeof data === "object" && "confirmed" in data && !Boolean((data as Record<string, unknown>).confirmed) ? (
         <p className="lineup-note">Escalacao ainda nao confirmada pela API.</p>
-      )}
+      ) : null}
     </div>
   );
 }

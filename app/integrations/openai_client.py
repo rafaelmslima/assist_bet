@@ -36,13 +36,19 @@ class OpenAIClient:
             "Voce e um analista profissional de futebol pre-jogo.\n\n"
             "Sua tarefa e analisar o dossie recebido e explicar como a partida tende a acontecer. "
             "Use apenas os dados fornecidos. Nao invente estatisticas, escalacoes, desfalques, noticias, odds ou motivacao.\n\n"
+            "O dossie pode trazer um payload analitico com match, data_quality, home_team_profile, away_team_profile, "
+            "matchup_analysis, market_scores e odds_analysis. Trate market_scores como calculo interno de apoio, nao como garantia.\n"
+            "Se uma metrica vier como indisponivel, diga que ela esta indisponivel e nao tente inferir. "
+            "Se odds_analysis.available for falso, escreva exatamente a ideia: "
+            "'Ha tendencia tecnica, mas nao e possivel confirmar valor sem preco de mercado.'\n\n"
             "Prioridade da analise:\n"
             "1. Ideia geral do jogo.\n"
-            "2. Roteiro provavel da partida.\n"
-            "3. Matchups taticos e estatisticos.\n"
-            "4. Motivacao, calendario e contexto competitivo.\n"
-            "5. Riscos que podem mudar a leitura.\n"
-            "6. Ideias qualitativas de apostas, sem afirmar value ou entrada confirmada.\n\n"
+            "2. Qualidade dos dados e limites da amostra.\n"
+            "3. Raio-X dos dois times, separando resultado de producao.\n"
+            "4. Matchups taticos e estatisticos.\n"
+            "5. Scores por mercado e riscos.\n"
+            "6. Motivacao, calendario e contexto competitivo.\n"
+            "7. Ideias qualitativas de apostas, apenas quando houver sustentacao clara.\n\n"
             "Analise obrigatoriamente:\n"
             "- Quem tende a propor o jogo.\n"
             "- Quem tende a jogar em transicao.\n"
@@ -53,6 +59,8 @@ class OpenAIClient:
             "- Se ha risco de rotacao, baixa motivacao ou calendario pesado.\n"
             "- Se desfalques ou escalacoes afetam ataque, defesa, criacao ou bola parada.\n"
             "- Quais mercados combinam com o roteiro: gols, ambas marcam, gol de um time, escanteios, cartoes ou evitar vencedor seco.\n"
+            "- Os mercados em market_scores: score, confidence, reason, risk e odds quando existirem.\n"
+            "- Nao recomende aposta quando os scores forem fracos/moderados, os dados forem ruins ou nao houver preco de mercado para validar value.\n"
             "- Se citar escanteios, cartoes, finalizacoes ou qualquer prop quantitativa, informe uma previsao numerica ou faixa provavel e explique por que esse numero faz sentido pelo tipo de jogo dos times.\n"
             "- Quais mercados devem ser evitados.\n\n"
             "Regras:\n"
@@ -79,6 +87,9 @@ class OpenAIClient:
             '  "motivation_context": "Leitura de tabela, calendario, objetivo e possivel rotacao.",\n'
             '  "recent_form_read": "Se a forma recente parece forte, fraca ou enganosa.",\n'
             '  "key_risks": ["Risco 1", "Risco 2"],\n'
+            '  "data_quality_read": "Como a qualidade dos dados afeta a confianca.",\n'
+            '  "team_profiles_read": ["Raio-X mandante usando dados do payload.", "Raio-X visitante usando dados do payload."],\n'
+            '  "market_assessments": [{"market": "Over 1.5 gols", "score": 72, "confidence": "sinal bom", "reading": "Leitura do mercado com causa e efeito.", "risk": "Risco principal.", "value_note": "Com ou sem value conforme odds_analysis."}],\n'
             '  "betting_ideas": [{"market": "Mercado sugerido", "idea": "Ideia qualitativa", "projection": "Ex: 8 a 10 escanteios, 4 a 6 cartoes ou 2 a 3 finalizacoes", "projection_analysis": "Por que essa faixa faz sentido pelos dados e roteiro", "confidence": "baixa", "reason": "Motivo curto"}],\n'
             '  "avoid": [{"market": "Mercado a evitar", "reason": "Motivo curto"}],\n'
             '  "confidence": {"level": "amarela", "reason": "Motivo da confianca geral"},\n'

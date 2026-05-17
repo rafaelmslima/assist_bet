@@ -62,6 +62,9 @@ class FootballAIAnalysisService:
                 "motivation_context": _join_context_lines(context.get("summary_lines")) or "contexto competitivo parcial ou indisponivel.",
                 "recent_form_read": _recent_form_read(home, away, home_team, away_team),
                 "key_risks": risks[:5],
+                "data_quality_read": _local_data_quality_read(dossier),
+                "team_profiles_read": _local_team_profiles_read(dossier),
+                "market_assessments": _local_market_assessments(dossier),
                 "betting_ideas": ideas,
                 "avoid": [
                     {
@@ -98,8 +101,11 @@ def _format_analysis(analysis: FootballAIAnalysis) -> str:
     blocks = [
         analysis.fixture_label,
         _section("Leitura do jogo", _opening_paragraph(analysis)),
+        _section("Qualidade dos dados", _data_quality_block(analysis)),
+        _section("Raio-X dos times", _team_profiles_block(analysis)),
         _section("Roteiro provável", _script_paragraph(analysis)),
         _section("Fatores que pesam", _context_block(analysis)),
+        _section("Scores de mercado", _market_scores_block(analysis)),
         _section("Ideias de mercado", _market_block(analysis)),
     ]
     confidence_note = _confidence_note(analysis)
@@ -154,6 +160,49 @@ def _context_block(analysis: FootballAIAnalysis) -> str:
     if risk:
         lines.append(f"- Risco principal: {_sentence(risk)}")
     return "\n".join(lines) or "Os dados ainda não mostram um encaixe forte o bastante para exagerar na convicção."
+
+
+def _data_quality_block(analysis: FootballAIAnalysis) -> str:
+    read = _sentence(getattr(analysis, "data_quality_read", ""))
+    if read:
+        return read
+    notes = [str(item) for item in analysis.data_quality_notes[:2] if str(item).strip()]
+    if notes:
+        return " ".join(_sentence(item) for item in notes)
+    return ""
+
+
+def _team_profiles_block(analysis: FootballAIAnalysis) -> str:
+    lines = []
+    for item in getattr(analysis, "team_profiles_read", [])[:3]:
+        text = _sentence(item)
+        if text:
+            lines.append(f"- {text}")
+    return "\n".join(lines)
+
+
+def _market_scores_block(analysis: FootballAIAnalysis) -> str:
+    rows = []
+    for item in getattr(analysis, "market_assessments", [])[:6]:
+        market = _clean_text(getattr(item, "market", ""))
+        score = getattr(item, "score", None)
+        confidence = _clean_text(getattr(item, "confidence", ""))
+        reading = _sentence(getattr(item, "reading", ""))
+        risk = _sentence(getattr(item, "risk", ""))
+        value = _sentence(getattr(item, "value_note", ""))
+        if not market:
+            continue
+        line = f"- {market}: {score}/100"
+        if confidence:
+            line += f" ({confidence})"
+        if reading:
+            line += f". {reading}"
+        if risk:
+            line += f" Risco: {risk}"
+        if value:
+            line += f" {value}"
+        rows.append(line)
+    return "\n".join(rows)
 
 
 def _market_block(analysis: FootballAIAnalysis) -> str:
@@ -324,6 +373,87 @@ def _local_general_idea(home: str, away: str, home_team: dict[str, Any], away_te
             return f"O {away} tem sinais para incomodar fora, entao o jogo nao parece simples para o mandante."
         return "Os dados apontam equilibrio razoavel, com leitura mais segura em roteiro de jogo do que em vencedor."
     return "os dados sao parciais para montar a leitura, mas ainda nao bastam para cravar um roteiro forte."
+
+
+def _local_data_quality_read(dossier: dict[str, Any]) -> str:
+    quality = dossier.get("data_quality") or {}
+    penalty = quality.get("confidence_penalty")
+    missing = quality.get("missing_critical_fields") or []
+    if penalty is not None:
+        base = f"Penalidade interna de confianca: {penalty}/30."
+    else:
+        base = "Qualidade dos dados parcial."
+    if missing:
+        base += f" Campos criticos ausentes: {', '.join(str(item) for item in missing[:5])}."
+    return base
+
+
+def _local_team_profiles_read(dossier: dict[str, Any]) -> list[str]:
+    rows = []
+    for key, label in (("home_team_profile", "Mandante"), ("away_team_profile", "Visitante")):
+        profile = dossier.get(key) or {}
+        name = profile.get("name") or label
+        recent = profile.get("recent_form", {}).get("last_5", {}) if isinstance(profile.get("recent_form"), dict) else {}
+        form_string = str(_nested_profile_get(profile, "recent_form", "form_string") or "")
+        fallback_record = _record_from_form(form_string)
+        attack = profile.get("attack") if isinstance(profile.get("attack"), dict) else {}
+        defense = profile.get("defense") if isinstance(profile.get("defense"), dict) else {}
+        rows.append(
+            f"{name}: últimos 5 com {recent.get('wins') if recent.get('sample_size') else fallback_record['wins']}V/"
+            f"{recent.get('draws') if recent.get('sample_size') else fallback_record['draws']}E/"
+            f"{recent.get('losses') if recent.get('sample_size') else fallback_record['losses']}D, "
+            f"ataque em {attack.get('goals_per_game', 'indisponivel')} gol/jogo e defesa cedendo {defense.get('goals_against_per_game', 'indisponivel')}."
+        )
+    return rows
+
+
+def _local_market_assessments(dossier: dict[str, Any]) -> list[dict[str, Any]]:
+    labels = {
+        "home_win": "Mandante vencer",
+        "double_chance_home": "Dupla chance mandante",
+        "over_1_5": "Over 1.5 gols",
+        "over_2_5": "Over 2.5 gols",
+        "under_2_5": "Under 2.5 gols",
+        "btts": "Ambas marcam",
+        "home_team_goal": "Mandante marcar",
+        "away_team_goal": "Visitante marcar",
+    }
+    rows = []
+    scores = dossier.get("market_scores") if isinstance(dossier.get("market_scores"), dict) else {}
+    for key, item in sorted(scores.items(), key=lambda pair: int((pair[1] or {}).get("score") or 0), reverse=True):
+        if not isinstance(item, dict):
+            continue
+        odds = item.get("odds") if isinstance(item.get("odds"), dict) else {}
+        value_note = odds.get("value_label") if odds else "Há tendência técnica, mas não é possível confirmar valor sem preço de mercado."
+        rows.append(
+            {
+                "market": labels.get(key, key),
+                "score": int(item.get("score") or 0),
+                "confidence": item.get("confidence") or "",
+                "reading": item.get("reason") or "",
+                "risk": item.get("risk") or "",
+                "value_note": value_note,
+            }
+        )
+    return rows[:6]
+
+
+def _record_from_form(value: str) -> dict[str, int]:
+    chars = [char.upper() for char in value if char.upper() in {"W", "D", "L", "V", "E"}][-5:]
+    return {
+        "wins": sum(1 for char in chars if char in {"W", "V"}),
+        "draws": sum(1 for char in chars if char in {"D", "E"}),
+        "losses": sum(1 for char in chars if char == "L"),
+    }
+
+
+def _nested_profile_get(data: dict[str, Any], *keys: str) -> Any:
+    current: Any = data
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
 
 
 def _build_local_script(home: str, away: str, home_team: dict[str, Any], away_team: dict[str, Any]) -> dict[str, str]:

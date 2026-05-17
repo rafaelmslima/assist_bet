@@ -35,6 +35,15 @@ class AvoidMarket(BaseModel):
     reason: str = ""
 
 
+class MarketAssessment(BaseModel):
+    market: str = ""
+    score: int = 0
+    confidence: str = ""
+    reading: str = ""
+    risk: str = ""
+    value_note: str = ""
+
+
 class OverallConfidence(BaseModel):
     level: TrafficLight = "amarela"
     reason: str = ""
@@ -50,6 +59,9 @@ class FootballAIAnalysis(BaseModel):
     motivation_context: str = ""
     recent_form_read: str = ""
     key_risks: list[str] = Field(default_factory=list)
+    data_quality_read: str = ""
+    team_profiles_read: list[str] = Field(default_factory=list)
+    market_assessments: list[MarketAssessment] = Field(default_factory=list)
     betting_ideas: list[BettingIdea] = Field(default_factory=list)
     avoid: list[AvoidMarket] = Field(default_factory=list)
     confidence: OverallConfidence = Field(default_factory=OverallConfidence)

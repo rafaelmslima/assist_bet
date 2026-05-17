@@ -39,12 +39,15 @@ class FootballMatchDossierService:
         away_team_data: dict[str, Any],
         football_context: dict[str, Any],
         player_context: Any | None = None,
+        odds: list[dict[str, Any]] | None = None,
+        odds_error: Any | None = None,
     ) -> dict[str, Any]:
         lineups = getattr(player_context, "lineups", {}) or {}
         injuries = list(getattr(player_context, "injuries", []) or [])
         predictions = getattr(player_context, "predictions", {}) or {}
         coverage = getattr(player_context, "coverage", {}) or {}
         player_quality = list(getattr(player_context, "data_quality", []) or [])
+        odds_items = odds or []
         corners = self._build_corners_context(fixture)
         markets = self._build_market_candidates(
             fixture=fixture,
@@ -67,9 +70,40 @@ class FootballMatchDossierService:
             corners=corners,
             player_quality=player_quality,
         )
+        data_quality = _build_data_quality(
+            home_team_data=home_team_data,
+            away_team_data=away_team_data,
+            football_context=football_context,
+            coverage=coverage,
+            lineups=lineups,
+            injuries=injuries,
+            corners=corners,
+            odds=odds_items,
+            odds_error=odds_error,
+            quality_notes=quality_notes,
+        )
+        home_profile = self._team_profile(home_team_data, fixture, side="home", injuries=injuries, lineups=lineups)
+        away_profile = self._team_profile(away_team_data, fixture, side="away", injuries=injuries, lineups=lineups)
+        matchup_analysis = _build_matchup_analysis(home_profile, away_profile)
+        odds_analysis = _build_odds_analysis(odds_items, home_profile, away_profile)
+        market_scores = _build_market_scores(
+            home_profile=home_profile,
+            away_profile=away_profile,
+            matchup=matchup_analysis,
+            data_quality=data_quality,
+            odds_analysis=odds_analysis,
+        )
 
         return {
-            "schema_version": "football_ai_dossier_v1",
+            "schema_version": "football_ai_dossier_v2",
+            "match": _compact_match(fixture),
+            "data_quality": data_quality,
+            "home_team_profile": home_profile,
+            "away_team_profile": away_profile,
+            "matchup_analysis": matchup_analysis,
+            "market_scores": market_scores,
+            "odds_analysis": odds_analysis,
+            # Legacy keys kept for the current UI/advice adapter.
             "fixture": _compact_fixture(fixture),
             "teams": {
                 "home": self._team_section(home_team_data),
@@ -90,12 +124,8 @@ class FootballMatchDossierService:
                 "ai_must_estimate": list(MARKET_CANDIDATES[:-1]),
                 "ai_may_recommend": list(MARKET_CANDIDATES),
                 "do_not_invent": ["lineups", "injuries", "standings", "statistics", "news"],
-                "primary_task": "explicar o roteiro provavel do jogo antes de sugerir ideias qualitativas de mercado",
-                "fallback_when_weak": "confianca baixa e jogo para observacao",
-            },
-            "data_quality": {
-                "level": _quality_level(quality_notes),
-                "notes": quality_notes,
+                "primary_task": "explicar o roteiro provavel do jogo usando o payload analitico antes de sugerir mercados",
+                "fallback_when_weak": "confianca baixa, sem recomendacao quando data_quality ou odds nao sustentarem valor claro",
             },
         }
 
@@ -117,6 +147,62 @@ class FootballMatchDossierService:
                 "away_avg_conceded": data.get("away_avg_conceded"),
                 "last_5_avg_scored": data.get("last_5_avg_scored"),
                 "last_5_avg_conceded": data.get("last_5_avg_conceded"),
+            },
+        }
+
+    def _team_profile(
+        self,
+        data: dict[str, Any],
+        fixture: dict[str, Any],
+        *,
+        side: str,
+        injuries: list[dict[str, Any]],
+        lineups: dict[str, Any],
+    ) -> dict[str, Any]:
+        split_key = "home" if side == "home" else "away"
+        recent = data.get("recent_form") if isinstance(data.get("recent_form"), dict) else {}
+        recent_5 = recent.get("last_5") if isinstance(recent.get("last_5"), dict) else {}
+        recent_10 = recent.get("last_10") if isinstance(recent.get("last_10"), dict) else {}
+        raw_stats = data.get("team_statistics_raw") if isinstance(data.get("team_statistics_raw"), dict) else {}
+        split = _home_away_split(data, split_key, recent_10, raw_stats)
+        attack = _attack_profile(data, split, recent_5, raw_stats)
+        defense = _defense_profile(data, split, recent_5, raw_stats)
+        team_id = data.get("id")
+        team_lineup = (lineups.get("teams") or {}).get(str(team_id), {}) if isinstance(lineups, dict) else {}
+
+        return {
+            "id": team_id,
+            "name": data.get("name"),
+            "side": side,
+            "overall": {
+                "avg_goals_for": data.get("avg_scored"),
+                "avg_goals_against": data.get("avg_conceded"),
+                "fixtures_played": _nested_get(data, "fixtures_played", "total"),
+                "form": data.get("season_form"),
+                "xg": "indisponivel",
+                "xga": "indisponivel",
+            },
+            f"{split_key}_split": split,
+            "recent_form": {
+                "last_5": recent_5,
+                "last_10": recent_10,
+                "matches": recent.get("matches") or [],
+                "form_string": data.get("last_5_form"),
+                "note": "forma em W/D/L e apenas apoio; leitura principal usa médias e frequências calculadas.",
+            },
+            "attack": attack,
+            "defense": defense,
+            "players": {
+                "lineup_confirmed": bool(lineups.get("confirmed")) if isinstance(lineups, dict) else False,
+                "formation": team_lineup.get("formation"),
+                "starters": [player.get("name") for player in (team_lineup.get("starters") or [])[:11]],
+                "main_finishers": "indisponivel",
+                "main_creators": "indisponivel",
+                "dependency_note": "indisponivel",
+            },
+            "injuries": {
+                "items": [item for item in injuries if str(item.get("team_id") or "") == str(team_id) or item.get("team_name") == data.get("name")],
+                "impact_by_sector": _injury_sector_impact(injuries, team_id),
             },
         }
 
@@ -341,6 +427,412 @@ def _compact_fixture(fixture: dict[str, Any]) -> dict[str, Any]:
         "home_team": fixture.get("home_team"),
         "away_team": fixture.get("away_team"),
     }
+
+
+def _compact_match(fixture: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "fixture_id": fixture.get("fixture_id"),
+        "home_team": fixture.get("home_team"),
+        "away_team": fixture.get("away_team"),
+        "competition": fixture.get("league"),
+        "date": fixture.get("fixture_date"),
+        "venue": "indisponivel",
+        "round": fixture.get("round"),
+        "home_advantage": True,
+    }
+
+
+def _build_data_quality(
+    *,
+    home_team_data: dict[str, Any],
+    away_team_data: dict[str, Any],
+    football_context: dict[str, Any],
+    coverage: dict[str, bool],
+    lineups: dict[str, Any],
+    injuries: list[dict[str, Any]],
+    corners: dict[str, Any],
+    odds: list[dict[str, Any]],
+    odds_error: Any,
+    quality_notes: list[str],
+) -> dict[str, Any]:
+    missing: list[str] = []
+    recent_available = (
+        bool(_nested_get(home_team_data, "recent_form", "last_5", "sample_size"))
+        and bool(_nested_get(away_team_data, "recent_form", "last_5", "sample_size"))
+    ) or (bool(home_team_data.get("last_5_form")) and bool(away_team_data.get("last_5_form")))
+    home_away_available = home_team_data.get("home_avg_scored") is not None and away_team_data.get("away_avg_scored") is not None
+    standings_available = bool(football_context.get("summary_lines")) if isinstance(football_context, dict) else False
+    odds_available = _has_normalizable_odds(odds)
+    sample_size_ok = (
+        (_to_float(_nested_get(home_team_data, "recent_form", "last_5", "sample_size")) or 0) >= 4
+        and (_to_float(_nested_get(away_team_data, "recent_form", "last_5", "sample_size")) or 0) >= 4
+    )
+
+    checks = {
+        "lineups": bool(lineups.get("confirmed")),
+        "odds": odds_available,
+        "xg": False,
+        "injuries": bool(injuries) or bool(coverage.get("injuries")) if isinstance(coverage, dict) else bool(injuries),
+        "standings": standings_available,
+        "home_away_split": home_away_available,
+        "recent_form": recent_available,
+        "sample_size": sample_size_ok,
+    }
+    labels = {
+        "lineups": "lineups_available",
+        "odds": "odds_available",
+        "xg": "xg_available",
+        "injuries": "injuries_available",
+        "standings": "standings_available",
+        "home_away_split": "home_away_split_available",
+        "recent_form": "recent_form_available",
+        "sample_size": "sample_size_ok",
+    }
+    for key, available in checks.items():
+        if not available:
+            missing.append(labels[key])
+    if odds_error:
+        missing.append("odds_error")
+
+    penalty = 0
+    penalty += 8 if not checks["recent_form"] else 0
+    penalty += 5 if not checks["home_away_split"] else 0
+    penalty += 5 if not checks["standings"] else 0
+    penalty += 5 if not checks["lineups"] else 0
+    penalty += 4 if not checks["odds"] else 0
+    penalty += 3 if not checks["sample_size"] else 0
+    penalty = min(30, penalty)
+
+    return {
+        "lineups_available": checks["lineups"],
+        "odds_available": checks["odds"],
+        "xg_available": checks["xg"],
+        "injuries_available": checks["injuries"],
+        "standings_available": checks["standings"],
+        "home_away_split_available": checks["home_away_split"],
+        "recent_form_available": checks["recent_form"],
+        "sample_size_ok": checks["sample_size"],
+        "missing_critical_fields": _unique(missing),
+        "confidence_penalty": penalty,
+        "level": "completo" if penalty <= 8 else "parcial" if penalty <= 18 else "fraco",
+        "notes": _unique(quality_notes + (["odds indisponiveis ou nao retornadas pela API"] if not odds_available else [])),
+    }
+
+
+def _home_away_split(data: dict[str, Any], split_key: str, recent: dict[str, Any], raw_stats: dict[str, Any]) -> dict[str, Any]:
+    goals_for = data.get(f"{split_key}_avg_scored")
+    goals_against = data.get(f"{split_key}_avg_conceded")
+    played = _nested_get(raw_stats, "fixtures", "played", split_key)
+    return {
+        "sample_size": played,
+        "goals_for_avg": goals_for,
+        "goals_against_avg": goals_against,
+        "xg_avg": "indisponivel",
+        "xga_avg": "indisponivel",
+        "over_1_5_pct": recent.get("over_1_5_pct"),
+        "over_2_5_pct": recent.get("over_2_5_pct"),
+        "btts_pct": recent.get("btts_pct"),
+        "clean_sheet_pct": recent.get("clean_sheet_pct"),
+        "scored_1_plus_pct": recent.get("scored_1_plus_pct"),
+        "scored_2_plus_pct": recent.get("scored_2_plus_pct"),
+        "conceded_1_plus_pct": recent.get("conceded_1_plus_pct"),
+        "conceded_2_plus_pct": recent.get("conceded_2_plus_pct"),
+        "first_half_goals_for_avg": recent.get("first_half_goals_for_avg"),
+        "first_half_goals_against_avg": recent.get("first_half_goals_against_avg"),
+        "second_half_goals_for_avg": recent.get("second_half_goals_for_avg"),
+        "second_half_goals_against_avg": recent.get("second_half_goals_against_avg"),
+        "first_goal_pct": "indisponivel",
+    }
+
+
+def _attack_profile(data: dict[str, Any], split: dict[str, Any], recent: dict[str, Any], raw_stats: dict[str, Any]) -> dict[str, Any]:
+    avg_for = _first_number(split.get("goals_for_avg"), data.get("avg_scored"), recent.get("avg_scored"))
+    shots_total = _nested_get(raw_stats, "shots", "total")
+    shots_on = _nested_get(raw_stats, "shots", "on")
+    return {
+        "goals_per_game": avg_for,
+        "xg_per_game": "indisponivel",
+        "shots_per_game": shots_total or "indisponivel",
+        "shots_on_target_per_game": shots_on or "indisponivel",
+        "big_chances_created": "indisponivel",
+        "chance_conversion": "indisponivel",
+        "xg_vs_goals": "indisponivel",
+        "scored_1_plus_pct": recent.get("scored_1_plus_pct"),
+        "scored_2_plus_pct": recent.get("scored_2_plus_pct"),
+        "main_finishers": "indisponivel",
+        "main_creators": "indisponivel",
+    }
+
+
+def _defense_profile(data: dict[str, Any], split: dict[str, Any], recent: dict[str, Any], raw_stats: dict[str, Any]) -> dict[str, Any]:
+    avg_against = _first_number(split.get("goals_against_avg"), data.get("avg_conceded"), recent.get("avg_conceded"))
+    return {
+        "goals_against_per_game": avg_against,
+        "xga_per_game": "indisponivel",
+        "shots_conceded_per_game": "indisponivel",
+        "shots_on_target_conceded_per_game": "indisponivel",
+        "big_chances_conceded": "indisponivel",
+        "clean_sheet_pct": recent.get("clean_sheet_pct"),
+        "conceded_1_plus_pct": recent.get("conceded_1_plus_pct"),
+        "conceded_2_plus_pct": recent.get("conceded_2_plus_pct"),
+        "defensive_errors": "indisponivel",
+        "set_piece_vulnerability": "indisponivel",
+        "transition_vulnerability": "indisponivel",
+    }
+
+
+def _build_matchup_analysis(home_profile: dict[str, Any], away_profile: dict[str, Any]) -> dict[str, Any]:
+    home_goal_signal = _avg_known(
+        _nested_get(home_profile, "attack", "goals_per_game"),
+        _nested_get(away_profile, "defense", "goals_against_per_game"),
+    )
+    away_goal_signal = _avg_known(
+        _nested_get(away_profile, "attack", "goals_per_game"),
+        _nested_get(home_profile, "defense", "goals_against_per_game"),
+    )
+    total = _sum_known(home_goal_signal, away_goal_signal)
+    home_mark_signal = _signal_label(home_goal_signal, high=1.45, medium=1.05)
+    away_mark_signal = _signal_label(away_goal_signal, high=1.35, medium=0.95)
+    over_signal = _signal_label(total, high=2.75, medium=2.15)
+    risks = []
+    if total is None:
+        risks.append("sem base numerica suficiente para gols totais")
+    if over_signal == "baixo":
+        risks.append("risco alto de jogo travado ou baixa eficiencia")
+    return {
+        "home_attack_vs_away_defense": {
+            "projected_goal_signal": home_goal_signal,
+            "signal": f"{home_mark_signal} pro-mandante marcar",
+        },
+        "away_attack_vs_home_defense": {
+            "projected_goal_signal": away_goal_signal,
+            "signal": f"{away_mark_signal} pro-visitante marcar",
+        },
+        "tempo_expectation": "mais aberto" if total is not None and total >= 2.65 else "controlado/moderado" if total is not None else "indisponivel",
+        "goal_expectation": f"{over_signal} tendencia de over",
+        "tactical_edges": [
+            f"Ataque mandante vs defesa visitante: {home_mark_signal}",
+            f"Ataque visitante vs defesa mandante: {away_mark_signal}",
+        ],
+        "main_risks": risks,
+    }
+
+
+def _build_odds_analysis(odds: list[dict[str, Any]], home_profile: dict[str, Any], away_profile: dict[str, Any]) -> dict[str, Any]:
+    markets = _normalize_odds(odds, home_profile.get("name"), away_profile.get("name"))
+    return {
+        "available": bool(markets),
+        "markets": markets,
+        "value_spots": [],
+        "avoid_markets": [] if markets else ["Há tendência técnica, mas não é possível confirmar valor sem preço de mercado."],
+    }
+
+
+def _build_market_scores(
+    *,
+    home_profile: dict[str, Any],
+    away_profile: dict[str, Any],
+    matchup: dict[str, Any],
+    data_quality: dict[str, Any],
+    odds_analysis: dict[str, Any],
+) -> dict[str, Any]:
+    penalty = int(data_quality.get("confidence_penalty") or 0)
+    home_goal = _to_float(_nested_get(matchup, "home_attack_vs_away_defense", "projected_goal_signal"))
+    away_goal = _to_float(_nested_get(matchup, "away_attack_vs_home_defense", "projected_goal_signal"))
+    total = _sum_known(home_goal, away_goal)
+    home_recent = _nested_get(home_profile, "recent_form", "last_5") or {}
+    away_recent = _nested_get(away_profile, "recent_form", "last_5") or {}
+
+    scores = {
+        "home_win": _score_payload(
+            50 + _spread(home_goal, away_goal, 18) - penalty * 0.45,
+            "resultado do mandante",
+            "depende de converter superioridade em placar; empate reduz valor.",
+        ),
+        "double_chance_home": _score_payload(
+            58 + _spread(home_goal, away_goal, 12) - penalty * 0.35,
+            "proteção melhor que vitória seca quando o mandante tem sinal ofensivo.",
+            "odd costuma vir baixa; precisa preço mínimo.",
+        ),
+        "over_1_5": _score_payload(
+            45 + ((_to_float(total) or 0) * 11) + _pct_bonus(home_recent.get("over_1_5_pct"), away_recent.get("over_1_5_pct"), 0.12) - penalty * 0.45,
+            "soma entre projeção de gols e frequências recentes.",
+            "perde força se escalações vierem conservadoras ou jogo travar cedo.",
+        ),
+        "over_2_5": _score_payload(
+            35 + ((_to_float(total) or 0) * 10) + _pct_bonus(home_recent.get("over_2_5_pct"), away_recent.get("over_2_5_pct"), 0.14) - penalty * 0.55,
+            "precisa de jogo mais aberto e participação dos dois lados.",
+            "linha mais sensível à eficiência e ao primeiro gol.",
+        ),
+        "under_2_5": _score_payload(
+            72 - ((_to_float(total) or 2.4) * 9) + _pct_bonus(100 - (_to_float(home_recent.get("over_2_5_pct")) or 50), 100 - (_to_float(away_recent.get("over_2_5_pct")) or 50), 0.10) - penalty * 0.35,
+            "ganha peso quando o total projetado é baixo.",
+            "sofre se houver gol cedo ou escalações muito ofensivas.",
+        ),
+        "btts": _score_payload(
+            38 + ((_to_float(home_goal) or 0) * 9) + ((_to_float(away_goal) or 0) * 9) + _pct_bonus(home_recent.get("btts_pct"), away_recent.get("btts_pct"), 0.10) - penalty * 0.50,
+            "cruza capacidade dos dois ataques com fragilidade defensiva adversária.",
+            "visitante sem produção fora derruba muito esse mercado.",
+        ),
+        "home_team_goal": _score_payload(
+            45 + ((_to_float(home_goal) or 0) * 18) + _pct_bonus(_nested_get(home_profile, "attack", "scored_1_plus_pct"), _nested_get(away_profile, "defense", "conceded_1_plus_pct"), 0.10) - penalty * 0.40,
+            "mercado sustentado pelo cruzamento ataque mandante x defesa visitante.",
+            "confirmar titulares ofensivos e preço.",
+        ),
+        "away_team_goal": _score_payload(
+            42 + ((_to_float(away_goal) or 0) * 17) + _pct_bonus(_nested_get(away_profile, "attack", "scored_1_plus_pct"), _nested_get(home_profile, "defense", "conceded_1_plus_pct"), 0.10) - penalty * 0.45,
+            "mede se o visitante tem caminho real para responder.",
+            "cai se postura fora for reativa ou escalação poupar ataque.",
+        ),
+    }
+    _attach_value_read(scores, odds_analysis)
+    return scores
+
+
+def _score_payload(score: float, reason: str, risk: str) -> dict[str, Any]:
+    clean_score = max(0, min(100, int(round(score))))
+    return {"score": clean_score, "confidence": _score_confidence(clean_score), "reason": reason, "risk": risk}
+
+
+def _score_confidence(score: int) -> str:
+    if score >= 80:
+        return "sinal forte"
+    if score >= 65:
+        return "sinal bom"
+    if score >= 50:
+        return "sinal moderado"
+    if score >= 35:
+        return "sinal fraco"
+    return "evitar"
+
+
+def _normalize_odds(odds: list[dict[str, Any]], home_name: Any, away_name: Any) -> dict[str, Any]:
+    normalized: dict[str, Any] = {}
+    for event in odds:
+        bookmakers = event.get("bookmakers") if isinstance(event.get("bookmakers"), list) else []
+        for bookmaker in bookmakers[:3]:
+            for bet in bookmaker.get("bets") or []:
+                bet_name = str(bet.get("name") or "")
+                for value in bet.get("values") or []:
+                    odd = _to_float(value.get("odd"))
+                    if not odd:
+                        continue
+                    label = str(value.get("value") or "")
+                    key = _market_key_from_odd(bet_name, label, home_name, away_name)
+                    if not key:
+                        continue
+                    normalized.setdefault(key, []).append(
+                        {
+                            "bookmaker": bookmaker.get("name"),
+                            "market": bet_name,
+                            "selection": label,
+                            "odd": odd,
+                            "implied_probability": round(1 / odd, 4) if odd > 1 else None,
+                        }
+                    )
+    return normalized
+
+
+def _has_normalizable_odds(odds: list[dict[str, Any]]) -> bool:
+    for event in odds:
+        bookmakers = event.get("bookmakers") if isinstance(event.get("bookmakers"), list) else []
+        for bookmaker in bookmakers:
+            bets = bookmaker.get("bets") if isinstance(bookmaker.get("bets"), list) else []
+            if bets:
+                return True
+    return False
+
+
+def _market_key_from_odd(market: str, selection: str, home_name: Any, away_name: Any) -> str | None:
+    text = _norm(f"{market} {selection}")
+    home = _norm(home_name)
+    away = _norm(away_name)
+    if "match winner" in text or "1x2" in text:
+        if home and home in text:
+            return "home_win"
+        if away and away in text:
+            return "away_win"
+        if "draw" in text:
+            return "draw"
+    if "over/under" in text or "goals over/under" in text:
+        if "over" in text and "1.5" in text:
+            return "over_1_5"
+        if "over" in text and "2.5" in text:
+            return "over_2_5"
+        if "under" in text and "2.5" in text:
+            return "under_2_5"
+    if "both teams score" in text or "btts" in text:
+        if "yes" in text or "sim" in text:
+            return "btts"
+    return None
+
+
+def _attach_value_read(scores: dict[str, Any], odds_analysis: dict[str, Any]) -> None:
+    markets = odds_analysis.get("markets") if isinstance(odds_analysis.get("markets"), dict) else {}
+    for key, score_data in scores.items():
+        rows = markets.get(key) or []
+        if not rows:
+            continue
+        best = max(rows, key=lambda item: _to_float(item.get("odd")) or 0)
+        odd = _to_float(best.get("odd"))
+        if not odd:
+            continue
+        estimated = max(0.01, min(0.95, score_data["score"] / 100))
+        implied = 1 / odd
+        edge = estimated - implied
+        score_data["odds"] = {
+            "best_odd": odd,
+            "implied_probability": round(implied, 4),
+            "estimated_probability": round(estimated, 4),
+            "edge": round(edge, 4),
+            "value_label": "possivel value" if edge >= 0.04 and score_data["score"] >= 65 else "sem value claro",
+        }
+
+
+def _injury_sector_impact(injuries: list[dict[str, Any]], team_id: Any) -> dict[str, Any]:
+    team_injuries = [item for item in injuries if str(item.get("team_id") or "") == str(team_id)]
+    return {
+        "attack": "indisponivel",
+        "midfield": "indisponivel",
+        "defense": "indisponivel",
+        "goalkeeper": "indisponivel",
+        "known_absences": len(team_injuries),
+    }
+
+
+def _pct_bonus(left: Any, right: Any, weight: float) -> float:
+    values = [_to_float(left), _to_float(right)]
+    nums = [value for value in values if value is not None]
+    if not nums:
+        return 0.0
+    return (sum(nums) / len(nums) - 50) * weight
+
+
+def _spread(left: Any, right: Any, multiplier: float) -> float:
+    lnum = _to_float(left)
+    rnum = _to_float(right)
+    if lnum is None or rnum is None:
+        return 0.0
+    return (lnum - rnum) * multiplier
+
+
+def _signal_label(value: Any, *, high: float, medium: float) -> str:
+    number = _to_float(value)
+    if number is None:
+        return "indisponivel"
+    if number >= high:
+        return "forte"
+    if number >= medium:
+        return "medio"
+    return "fraco"
+
+
+def _first_number(*values: Any) -> float | None:
+    for value in values:
+        number = _to_float(value)
+        if number is not None:
+            return number
+    return None
 
 
 def _compact_prediction(predictions: dict[str, Any]) -> dict[str, Any]:

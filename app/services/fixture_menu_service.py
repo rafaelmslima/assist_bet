@@ -275,6 +275,14 @@ class FixtureMenuService:
             predictions = player_context.predictions
             lineups_confirmed = bool(player_advice.get("lineups_confirmed", False))
 
+        odds_response = _cached_call(
+            "api_football.fixture_odds",
+            900,
+            lambda: self.client.get_odds(int(fixture_id)),
+            fixture_id,
+        )
+        odds_data = _as_list(odds_response.get("data")) if odds_response.get("ok") else []
+
         card_text = generate_pre_match_card(
             {
                 "fixture": fixture,
@@ -292,6 +300,8 @@ class FixtureMenuService:
             away_team_data=away_team_data,
             football_context=football_context,
             player_context=player_context,
+            odds=odds_data,
+            odds_error=None if odds_response.get("ok") else odds_response.get("error"),
         )
         ai_result = self.football_ai_analysis.analyze(dossier)
         advisor_text = ai_result["advisor_text"]
@@ -393,9 +403,9 @@ class FixtureMenuService:
         fixtures_response = _cached_call(
             "api_football.team_fixtures_last",
             300,
-            lambda: self.client.get_team_fixtures(team_id, last=5, league_id=league_id, season=season),
+            lambda: self.client.get_team_fixtures(team_id, last=10, league_id=league_id, season=season),
             team_id,
-            5,
+            10,
             league_id,
             season,
         )
@@ -416,8 +426,12 @@ class FixtureMenuService:
             "name": team_name,
             "side": side,
             "last_5_form": recent_metrics.get("last_5_form") or _last_form_chars(stats.get("form"), limit=5),
+            "last_10_form": recent_metrics.get("last_10_form") or _last_form_chars(stats.get("form"), limit=10),
+            "recent_form": recent_metrics,
             "last_5_avg_scored": recent_metrics.get("avg_scored"),
             "last_5_avg_conceded": recent_metrics.get("avg_conceded"),
+            "last_10_avg_scored": _nested_get(recent_metrics, "last_10", "avg_scored"),
+            "last_10_avg_conceded": _nested_get(recent_metrics, "last_10", "avg_conceded"),
             "season_form": _last_form_chars(stats.get("form"), limit=12),
             "avg_scored": _nested_float(goals_for, "average", "total") or recent_metrics.get("avg_scored"),
             "avg_conceded": _nested_float(goals_against, "average", "total") or recent_metrics.get("avg_conceded"),
@@ -425,6 +439,8 @@ class FixtureMenuService:
             "home_avg_conceded": _nested_float(goals_against, "average", "home"),
             "away_avg_scored": _nested_float(goals_for, "average", "away"),
             "away_avg_conceded": _nested_float(goals_against, "average", "away"),
+            "fixtures_played": _nested_get(stats, "fixtures", "played") or {},
+            "team_statistics_raw": stats,
         }
 
         return data
@@ -612,11 +628,9 @@ def _format_selected_fixture_analysis(
 
 
 def _recent_metrics_from_fixtures(fixtures: list[dict[str, Any]], team_id: int) -> dict[str, Any]:
-    form = []
-    scored_values = []
-    conceded_values = []
+    matches: list[dict[str, Any]] = []
 
-    for item in fixtures[:5]:
+    for item in fixtures[:10]:
         teams = item.get("teams") if isinstance(item.get("teams"), dict) else {}
         goals = item.get("goals") if isinstance(item.get("goals"), dict) else {}
         home = teams.get("home") if isinstance(teams.get("home"), dict) else {}
@@ -634,20 +648,96 @@ def _recent_metrics_from_fixtures(fixtures: list[dict[str, Any]], team_id: int) 
 
         scored = home_goals if is_home else away_goals
         conceded = away_goals if is_home else home_goals
-        scored_values.append(scored)
-        conceded_values.append(conceded)
-        if scored > conceded:
-            form.append("W")
-        elif scored < conceded:
-            form.append("L")
-        else:
-            form.append("D")
+        result = "W" if scored > conceded else "L" if scored < conceded else "D"
+        halftime_home = _nested_float(item, "score", "halftime", "home")
+        halftime_away = _nested_float(item, "score", "halftime", "away")
+        ht_scored = halftime_home if is_home else halftime_away
+        ht_conceded = halftime_away if is_home else halftime_home
+        matches.append(
+            {
+                "fixture_id": _nested_get(item, "fixture", "id") or item.get("fixture_id"),
+                "date": _nested_get(item, "fixture", "date") or item.get("fixture_date"),
+                "opponent": away.get("name") if is_home else home.get("name"),
+                "venue": "home" if is_home else "away",
+                "result": result,
+                "goals_for": scored,
+                "goals_against": conceded,
+                "halftime_goals_for": ht_scored,
+                "halftime_goals_against": ht_conceded,
+            }
+        )
+
+    last_5 = matches[:5]
+    last_10 = matches[:10]
+    summary_5 = _summarize_matches(last_5)
+    summary_10 = _summarize_matches(last_10)
 
     return {
-        "last_5_form": "".join(form) or None,
+        "last_5_form": "".join(item["result"] for item in last_5) or None,
+        "last_10_form": "".join(item["result"] for item in last_10) or None,
+        "avg_scored": summary_5.get("avg_scored"),
+        "avg_conceded": summary_5.get("avg_conceded"),
+        "last_5": summary_5,
+        "last_10": summary_10,
+        "matches": last_10,
+    }
+
+
+def _summarize_matches(matches: list[dict[str, Any]]) -> dict[str, Any]:
+    sample = len(matches)
+    scored_values = [float(item["goals_for"]) for item in matches if _to_float(item.get("goals_for")) is not None]
+    conceded_values = [float(item["goals_against"]) for item in matches if _to_float(item.get("goals_against")) is not None]
+    ht_scored_values = [_to_float(item.get("halftime_goals_for")) for item in matches]
+    ht_conceded_values = [_to_float(item.get("halftime_goals_against")) for item in matches]
+    ht_scored_values = [value for value in ht_scored_values if value is not None]
+    ht_conceded_values = [value for value in ht_conceded_values if value is not None]
+
+    wins = sum(1 for item in matches if item.get("result") == "W")
+    draws = sum(1 for item in matches if item.get("result") == "D")
+    losses = sum(1 for item in matches if item.get("result") == "L")
+    total_goals = [float(item["goals_for"]) + float(item["goals_against"]) for item in matches]
+
+    return {
+        "sample_size": sample,
+        "wins": wins,
+        "draws": draws,
+        "losses": losses,
+        "goals_for": int(sum(scored_values)) if scored_values else 0,
+        "goals_against": int(sum(conceded_values)) if conceded_values else 0,
+        "goal_difference": int(sum(scored_values) - sum(conceded_values)) if scored_values and conceded_values else None,
         "avg_scored": round(mean(scored_values), 2) if scored_values else None,
         "avg_conceded": round(mean(conceded_values), 2) if conceded_values else None,
+        "avg_total_goals": round(mean(total_goals), 2) if total_goals else None,
+        "scored_1_plus_pct": _pct(matches, lambda item: _to_float(item.get("goals_for")) is not None and float(item["goals_for"]) >= 1),
+        "scored_2_plus_pct": _pct(matches, lambda item: _to_float(item.get("goals_for")) is not None and float(item["goals_for"]) >= 2),
+        "conceded_1_plus_pct": _pct(matches, lambda item: _to_float(item.get("goals_against")) is not None and float(item["goals_against"]) >= 1),
+        "conceded_2_plus_pct": _pct(matches, lambda item: _to_float(item.get("goals_against")) is not None and float(item["goals_against"]) >= 2),
+        "over_1_5_pct": _pct(matches, lambda item: _to_float(item.get("goals_for")) is not None and float(item["goals_for"]) + float(item["goals_against"]) >= 2),
+        "over_2_5_pct": _pct(matches, lambda item: _to_float(item.get("goals_for")) is not None and float(item["goals_for"]) + float(item["goals_against"]) >= 3),
+        "btts_pct": _pct(matches, lambda item: _to_float(item.get("goals_for")) is not None and float(item["goals_for"]) >= 1 and float(item["goals_against"]) >= 1),
+        "clean_sheet_pct": _pct(matches, lambda item: _to_float(item.get("goals_against")) is not None and float(item["goals_against"]) == 0),
+        "first_half_goals_for_avg": round(mean(ht_scored_values), 2) if ht_scored_values else None,
+        "first_half_goals_against_avg": round(mean(ht_conceded_values), 2) if ht_conceded_values else None,
+        "second_half_goals_for_avg": _second_half_avg(matches, "for"),
+        "second_half_goals_against_avg": _second_half_avg(matches, "against"),
+        "opponents": [str(item.get("opponent")) for item in matches if item.get("opponent")],
     }
+
+
+def _pct(matches: list[dict[str, Any]], predicate) -> float | None:
+    if not matches:
+        return None
+    return round(sum(1 for item in matches if predicate(item)) / len(matches) * 100, 1)
+
+
+def _second_half_avg(matches: list[dict[str, Any]], side: str) -> float | None:
+    values = []
+    for item in matches:
+        total = _to_float(item.get("goals_for" if side == "for" else "goals_against"))
+        first = _to_float(item.get("halftime_goals_for" if side == "for" else "halftime_goals_against"))
+        if total is not None and first is not None:
+            values.append(total - first)
+    return round(mean(values), 2) if values else None
 
 
 def _build_betting_read(

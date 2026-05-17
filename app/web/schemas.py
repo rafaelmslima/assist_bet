@@ -16,6 +16,11 @@ class PasswordResetRequest(BaseModel):
     password: str
 
 
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 class WebUserRead(BaseModel):
     id: int
     email: str

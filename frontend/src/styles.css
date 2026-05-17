@@ -64,7 +64,7 @@ select {
 
 .login-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 6px;
   margin: 0 0 18px;
   padding: 4px;

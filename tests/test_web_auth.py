@@ -135,6 +135,28 @@ class WebAuthTest(unittest.TestCase):
         )
         self.assertEqual(login_response.status_code, 200)
 
+    def test_public_register_creates_user_and_logs_in(self) -> None:
+        response = self.client.post(
+            "/api/auth/register",
+            json={"email": "created@example.com", "password": "created123"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["role"], "user")
+
+        me_response = self.client.get("/api/me")
+        self.assertEqual(me_response.status_code, 200)
+        self.assertEqual(me_response.json()["email"], "created@example.com")
+
+    def test_public_register_admin_email_gets_admin_role(self) -> None:
+        response = self.client.post(
+            "/api/auth/register",
+            json={"email": "rafaelmslima.miranda2@gmail.com", "password": "created123"},
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["role"], "admin")
+
 
 if __name__ == "__main__":
     unittest.main()

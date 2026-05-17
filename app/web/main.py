@@ -25,6 +25,7 @@ from app.web.schemas import (
     LeagueRead,
     LoginRequest,
     PasswordResetRequest,
+    RegisterRequest,
     StatusResponse,
     TextPanelResponse,
     WebUserRead,
@@ -127,6 +128,24 @@ def logout(response: Response) -> dict[str, bool]:
         samesite="lax",
     )
     return {"ok": True}
+
+
+@app.post("/api/auth/register", response_model=WebUserRead, status_code=status.HTTP_201_CREATED)
+def register(payload: RegisterRequest, response: Response, db: Session = Depends(get_db_session)) -> WebUserRead:
+    _validate_password(payload.password)
+    email = payload.email.lower().strip()
+    if get_web_user_by_email(db, email):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Usuario ja existe.")
+
+    user = create_web_user(
+        db,
+        email=email,
+        password_hash=hash_password(payload.password),
+        role=_role_for_email(email),
+    )
+    token = create_session_token(user.id, user.email, user.role)
+    _set_session_cookie(response, token)
+    return _user_read(user)
 
 
 @app.post("/api/auth/reset-password", response_model=WebUserRead)

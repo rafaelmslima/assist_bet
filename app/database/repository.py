@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+import sqlalchemy as sa
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -10,7 +11,8 @@ from app.database.models import OddsSnapshot, Recommendation, WebUser, utc_now
 
 
 def get_web_user_by_email(db: Session, email: str) -> WebUser | None:
-    statement = select(WebUser).where(WebUser.email == email.lower().strip())
+    normalized_email = email.lower().strip()
+    statement = select(WebUser).where(sa.func.lower(sa.func.trim(WebUser.email)) == normalized_email)
     return db.scalar(statement)
 
 

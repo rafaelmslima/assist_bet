@@ -24,7 +24,7 @@ PASSWORD_HASH = "$2b$12$5Jrogy/mbSB8pBUzUV6hAu7uTCHZ9u6GuzVUD5nPOKxjbhcU40Oze"
 def upgrade() -> None:
     bind = op.get_bind()
     existing_id = bind.scalar(
-        sa.text("SELECT id FROM web_users WHERE lower(email) = :email LIMIT 1"),
+        sa.text("SELECT id FROM web_users WHERE lower(trim(email)) = :email LIMIT 1"),
         {"email": ADMIN_EMAIL},
     )
 
@@ -44,14 +44,15 @@ def upgrade() -> None:
         sa.text(
             """
             UPDATE web_users
-            SET password_hash = :password_hash,
+            SET email = :email,
+                password_hash = :password_hash,
                 role = 'admin',
                 is_active = true,
                 updated_at = CURRENT_TIMESTAMP
             WHERE id = :user_id
             """
         ),
-        {"password_hash": PASSWORD_HASH, "user_id": existing_id},
+        {"email": ADMIN_EMAIL, "password_hash": PASSWORD_HASH, "user_id": existing_id},
     )
 
 

@@ -60,6 +60,7 @@ class Settings:
     login_rate_limit_attempts: int = int(os.getenv("LOGIN_RATE_LIMIT_ATTEMPTS", "5"))
     login_rate_limit_window_seconds: int = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "300"))
     fixture_payload_cache_seconds: int = int(os.getenv("FIXTURE_PAYLOAD_CACHE_SECONDS", "300"))
+    password_reset_code: str | None = os.getenv("PASSWORD_RESET_CODE")
 
     @property
     def is_production(self) -> bool:

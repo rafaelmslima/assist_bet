@@ -24,6 +24,7 @@ from app.web.schemas import (
     FixtureListResponse,
     LeagueRead,
     LoginRequest,
+    PasswordResetRequest,
     StatusResponse,
     TextPanelResponse,
     WebUserRead,
@@ -126,6 +127,20 @@ def logout(response: Response) -> dict[str, bool]:
         samesite="lax",
     )
     return {"ok": True}
+
+
+@app.post("/api/auth/reset-password", response_model=WebUserRead)
+def reset_password(payload: PasswordResetRequest, db: Session = Depends(get_db_session)) -> WebUserRead:
+    if not settings.password_reset_code:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Recuperacao de senha nao configurada.")
+    if payload.reset_code != settings.password_reset_code:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Chave de recuperacao invalida.")
+    _validate_password(payload.password)
+
+    user = get_web_user_by_email(db, payload.email)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario nao encontrado.")
+    return _user_read(update_web_user_password(db, user, hash_password(payload.password)))
 
 
 @app.get("/api/me", response_model=WebUserRead)

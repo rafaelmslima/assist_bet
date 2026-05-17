@@ -11,6 +11,7 @@ from app.database.models import Base
 from app.database.repository import create_web_user
 from app.web.dependencies import get_db_session
 from app.web.main import app, login_limiter
+from app.config import settings
 from app.web.security import hash_password
 
 
@@ -52,6 +53,7 @@ class WebAuthTest(unittest.TestCase):
     def tearDown(self) -> None:
         app.dependency_overrides.clear()
         login_limiter.clear()
+        object.__setattr__(settings, "password_reset_code", None)
 
     def test_protected_route_requires_session_cookie(self) -> None:
         response = self.client.get("/api/me")
@@ -117,6 +119,21 @@ class WebAuthTest(unittest.TestCase):
         response = self.client.get("/api/admin/users")
 
         self.assertEqual(response.status_code, 403)
+
+    def test_password_reset_with_recovery_code_updates_login_password(self) -> None:
+        object.__setattr__(settings, "password_reset_code", "recovery-code")
+
+        reset_response = self.client.post(
+            "/api/auth/reset-password",
+            json={"email": "admin@example.com", "reset_code": "recovery-code", "password": "changed123"},
+        )
+        self.assertEqual(reset_response.status_code, 200)
+
+        login_response = self.client.post(
+            "/api/auth/login",
+            json={"email": "admin@example.com", "password": "changed123"},
+        )
+        self.assertEqual(login_response.status_code, 200)
 
 
 if __name__ == "__main__":

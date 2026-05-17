@@ -10,6 +10,12 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+    reset_code: str
+    password: str
+
+
 class WebUserRead(BaseModel):
     id: int
     email: str

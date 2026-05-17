@@ -39,16 +39,36 @@ export function App() {
 }
 
 function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
+  const [mode, setMode] = useState<"login" | "reset">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError("");
+    setMessage("");
     try {
+      if (mode === "reset") {
+        if (password !== confirmPassword) {
+          throw new Error("As senhas nao conferem.");
+        }
+        await api<User>("/api/auth/reset-password", {
+          method: "POST",
+          body: JSON.stringify({ email, reset_code: resetCode, password })
+        });
+        setPassword("");
+        setConfirmPassword("");
+        setResetCode("");
+        setMode("login");
+        setMessage("Senha alterada. Entre com a nova senha.");
+        return;
+      }
       const user = await api<User>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password })
@@ -69,17 +89,38 @@ function LoginScreen({ onLogin }: { onLogin: (user: User) => void }) {
           <span>Assist Bet</span>
         </div>
         <h1>Dashboard</h1>
+        <div className="login-tabs">
+          <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">
+            Entrar
+          </button>
+          <button className={mode === "reset" ? "active" : ""} onClick={() => setMode("reset")} type="button">
+            Alterar senha
+          </button>
+        </div>
         <label>
           Email
           <input autoFocus value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
         </label>
+        {mode === "reset" && (
+          <label>
+            Chave de recuperacao
+            <input value={resetCode} onChange={(event) => setResetCode(event.target.value)} type="password" required />
+          </label>
+        )}
         <label>
-          Senha
+          {mode === "reset" ? "Nova senha" : "Senha"}
           <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
         </label>
+        {mode === "reset" && (
+          <label>
+            Confirmar nova senha
+            <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" required />
+          </label>
+        )}
         {error && <p className="form-error">{error}</p>}
+        {message && <p className="success-line">{message}</p>}
         <button className="primary-button" disabled={loading} type="submit">
-          {loading ? "Entrando..." : "Entrar"}
+          {loading ? "Aguarde..." : mode === "reset" ? "Alterar senha" : "Entrar"}
         </button>
       </form>
     </main>

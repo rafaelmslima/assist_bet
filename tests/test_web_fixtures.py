@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.database.models import Base
 from app.database.repository import create_web_user
 from app.web.dependencies import get_db_session
-from app.web.main import app
+from app.web.main import app, login_limiter
 from app.web.security import hash_password
 
 
@@ -46,6 +46,7 @@ class WebFixtureRoutesTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         app.dependency_overrides.clear()
+        login_limiter.clear()
 
     def test_lists_leagues(self) -> None:
         response = self.client.get("/api/leagues")

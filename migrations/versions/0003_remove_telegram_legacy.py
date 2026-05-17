@@ -1,5 +1,9 @@
 """Remove Telegram legacy tables.
 
+Irreversible by design: the dashboard product no longer owns the removed
+Telegram tables, so rollback should restore a database backup instead of
+recreating stale bot-era data structures.
+
 Revision ID: 0003_remove_telegram_legacy
 Revises: 0002_web_users
 Create Date: 2026-05-16
@@ -40,4 +44,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise NotImplementedError("Telegram legacy tables are not restored by this migration.")
+    raise RuntimeError("Irreversible migration. Restore a pre-upgrade backup to recover Telegram legacy tables.")

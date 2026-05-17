@@ -35,7 +35,7 @@ def init_db() -> None:
 
 
 def run_migrations() -> None:
-    """Apply Alembic migrations before the bot starts."""
+    """Apply Alembic migrations before the web app starts."""
     project_root = Path(__file__).resolve().parents[2]
     alembic_ini = project_root / "alembic.ini"
     if not alembic_ini.exists():

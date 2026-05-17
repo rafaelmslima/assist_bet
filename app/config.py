@@ -32,6 +32,15 @@ def _migrate_on_startup_from_env() -> bool:
     return os.getenv("ENVIRONMENT", "development").lower() == "production"
 
 
+def _web_secret_key_from_env() -> str:
+    default = "dev-insecure-change-me-please-32-bytes"
+    value = os.getenv("WEB_SECRET_KEY", default)
+    is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+    if is_production and (value == default or len(value) < 32):
+        raise RuntimeError("WEB_SECRET_KEY forte e obrigatoria quando ENVIRONMENT=production.")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     database_url: str = _database_url_from_env()
@@ -39,21 +48,18 @@ class Settings:
     api_football_key: str | None = os.getenv("API_FOOTBALL_KEY")
     api_football_base_url: str = os.getenv("API_FOOTBALL_BASE_URL", "https://v3.football.api-sports.io")
     api_football_host: str | None = os.getenv("API_FOOTBALL_HOST")
-    balldontlie_key: str | None = os.getenv("BALLDONTLIE_KEY")
-    odds_api_key: str | None = os.getenv("ODDS_API_KEY")
-    odds_api_regions: str = os.getenv("ODDS_API_REGIONS", "eu")
-    odds_api_markets: str = os.getenv("ODDS_API_MARKETS", "h2h,totals")
-    odds_api_odds_format: str = os.getenv("ODDS_API_ODDS_FORMAT", "decimal")
 
     environment: str = os.getenv("ENVIRONMENT", "development")
     database_create_all: bool = _truthy_env("DATABASE_CREATE_ALL")
     database_migrate_on_startup: bool = _migrate_on_startup_from_env()
-    bot_analysis_style: str = os.getenv("BOT_ANALYSIS_STYLE", "advisor")
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
     openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-    web_secret_key: str = os.getenv("WEB_SECRET_KEY", "dev-insecure-change-me-please-32-bytes")
+    web_secret_key: str = _web_secret_key_from_env()
     web_session_cookie_name: str = os.getenv("WEB_SESSION_COOKIE_NAME", "assist_bet_session")
     web_session_expire_minutes: int = int(os.getenv("WEB_SESSION_EXPIRE_MINUTES", "10080"))
+    login_rate_limit_attempts: int = int(os.getenv("LOGIN_RATE_LIMIT_ATTEMPTS", "5"))
+    login_rate_limit_window_seconds: int = int(os.getenv("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "300"))
+    fixture_payload_cache_seconds: int = int(os.getenv("FIXTURE_PAYLOAD_CACHE_SECONDS", "300"))
 
     @property
     def is_production(self) -> bool:

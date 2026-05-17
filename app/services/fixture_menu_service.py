@@ -263,8 +263,8 @@ class FixtureMenuService:
         fixture["quick_read"] = betting_read["scenario"]
         player_advice: dict[str, Any] = {}
         player_context = None
-        player_advice_text = "Jogadores interessantes\n\nUse o botao de jogadores para buscar stats individuais deste jogo."
-        injuries_text = "Desfalques\n\nUse o botao de desfalques para buscar dados atualizados deste jogo."
+        player_advice_text = "Jogadores interessantes\n\nAbra a aba Jogadores para consultar stats individuais deste jogo."
+        injuries_text = "Desfalques\n\nAbra a aba Desfalques para consultar dados atualizados deste jogo."
         predictions: dict[str, Any] = {}
         lineups_confirmed = False
         if include_players:

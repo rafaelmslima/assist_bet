@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
@@ -14,7 +14,7 @@ from app.config import settings
 from app.database.models import WebUser
 from app.database.repository import get_web_user_by_email
 from app.database.session import engine, init_db, run_migrations
-from app.services.cache_service import default_cache
+from app.services.cache_service import cache_key, default_cache
 from app.services.fixture_menu_service import FixtureMenuService, SAO_PAULO_TZ
 from app.web.dependencies import current_web_user, get_db_session
 from app.web.schemas import (
@@ -26,7 +26,7 @@ from app.web.schemas import (
     TextPanelResponse,
     WebUserRead,
 )
-from app.web.security import create_session_token, verify_password
+from app.web.security import LoginRateLimiter, create_session_token, verify_password
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -41,7 +41,17 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Assist Bet Dashboard", lifespan=lifespan)
+app = FastAPI(
+    title="Assist Bet Dashboard",
+    lifespan=lifespan,
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
+)
+login_limiter = LoginRateLimiter(
+    max_attempts=settings.login_rate_limit_attempts,
+    window_seconds=settings.login_rate_limit_window_seconds,
+)
 
 
 def _service() -> FixtureMenuService:
@@ -65,11 +75,26 @@ def _set_session_cookie(response: Response, token: str) -> None:
 
 
 @app.post("/api/auth/login", response_model=WebUserRead)
-def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db_session)) -> WebUserRead:
+def login(
+    payload: LoginRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db_session),
+) -> WebUserRead:
+    client_host = request.client.host if request.client else "unknown"
+    limiter_key = f"{client_host}:{payload.email.lower().strip()}"
+    if login_limiter.is_limited(limiter_key):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Muitas tentativas de login. Aguarde alguns minutos e tente novamente.",
+        )
+
     user = get_web_user_by_email(db, payload.email)
     if user is None or not user.is_active or not verify_password(payload.password, user.password_hash):
+        login_limiter.record_failure(limiter_key)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email ou senha invalidos.")
 
+    login_limiter.record_success(limiter_key)
     token = create_session_token(user.id, user.email, user.role)
     _set_session_cookie(response, token)
     return _user_read(user)
@@ -127,7 +152,7 @@ def fixtures(
 
 @app.get("/api/fixtures/{fixture_id}/analysis", response_model=FixtureAnalysisResponse)
 def fixture_analysis(fixture_id: str, _: WebUser = Depends(current_web_user)) -> FixtureAnalysisResponse:
-    payload = _service().build_fixture_advisor_payload(fixture_id)
+    payload = _fixture_payload(fixture_id)
     if payload.get("error"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(payload["error"]))
     return FixtureAnalysisResponse(
@@ -145,7 +170,7 @@ def fixture_analysis(fixture_id: str, _: WebUser = Depends(current_web_user)) ->
 
 @app.get("/api/fixtures/{fixture_id}/players", response_model=TextPanelResponse)
 def fixture_players(fixture_id: str, _: WebUser = Depends(current_web_user)) -> TextPanelResponse:
-    payload = _service().build_fixture_advisor_payload(fixture_id)
+    payload = _fixture_payload(fixture_id)
     if payload.get("error"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(payload["error"]))
     return TextPanelResponse(
@@ -157,7 +182,7 @@ def fixture_players(fixture_id: str, _: WebUser = Depends(current_web_user)) -> 
 
 @app.get("/api/fixtures/{fixture_id}/injuries", response_model=TextPanelResponse)
 def fixture_injuries(fixture_id: str, _: WebUser = Depends(current_web_user)) -> TextPanelResponse:
-    payload = _service().build_fixture_advisor_payload(fixture_id)
+    payload = _fixture_payload(fixture_id)
     if payload.get("error"):
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(payload["error"]))
     return TextPanelResponse(
@@ -168,13 +193,24 @@ def fixture_injuries(fixture_id: str, _: WebUser = Depends(current_web_user)) ->
 
 
 @app.get("/api/status", response_model=StatusResponse)
-def api_status(_: WebUser = Depends(current_web_user)) -> StatusResponse:
+def api_status(user: WebUser = Depends(current_web_user)) -> StatusResponse:
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acesso restrito a administradores.")
     return StatusResponse(
         environment=settings.environment,
         database=engine.url.drivername,
         api_football_configured=bool(settings.api_football_key),
         openai_configured=bool(settings.openai_api_key),
         cache=default_cache.stats(),
+    )
+
+
+def _fixture_payload(fixture_id: str) -> dict[str, Any]:
+    key = cache_key("web.fixture_advisor_payload", fixture_id, include_players=True)
+    return default_cache.get_or_set(
+        key,
+        settings.fixture_payload_cache_seconds,
+        lambda: _service().build_fixture_advisor_payload(fixture_id),
     )
 
 

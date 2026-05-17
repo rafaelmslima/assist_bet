@@ -10,7 +10,7 @@ from sqlalchemy.pool import StaticPool
 from app.database.models import Base
 from app.database.repository import create_web_user
 from app.web.dependencies import get_db_session
-from app.web.main import app
+from app.web.main import app, login_limiter
 from app.web.security import hash_password
 
 
@@ -45,6 +45,7 @@ class WebAuthTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         app.dependency_overrides.clear()
+        login_limiter.clear()
 
     def test_protected_route_requires_session_cookie(self) -> None:
         response = self.client.get("/api/me")
@@ -65,6 +66,20 @@ class WebAuthTest(unittest.TestCase):
 
         logout_response = self.client.post("/api/auth/logout")
         self.assertEqual(logout_response.status_code, 200)
+
+    def test_login_rate_limit_blocks_repeated_failures(self) -> None:
+        for _ in range(5):
+            response = self.client.post(
+                "/api/auth/login",
+                json={"email": "admin@example.com", "password": "wrong-password"},
+            )
+            self.assertEqual(response.status_code, 401)
+
+        blocked = self.client.post(
+            "/api/auth/login",
+            json={"email": "admin@example.com", "password": "wrong-password"},
+        )
+        self.assertEqual(blocked.status_code, 429)
 
 
 if __name__ == "__main__":

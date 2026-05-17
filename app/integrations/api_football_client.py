@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from time import sleep
 from typing import Any
 
 import httpx
@@ -20,6 +21,7 @@ class ApiFootballClient:
         base_url: str | None = None,
         api_host: str | None = None,
         timeout: float = 10.0,
+        max_retries: int = 2,
     ) -> None:
         self.api_key = api_key or settings.api_football_key
         self.base_url = base_url or settings.api_football_base_url
@@ -27,6 +29,7 @@ class ApiFootballClient:
         if not self.api_host and "rapidapi.com" in self.base_url:
             self.api_host = "api-football-v1.p.rapidapi.com"
         self.timeout = httpx.Timeout(timeout)
+        self.max_retries = max(0, max_retries)
 
     def get_team_by_name(self, team_name: str) -> dict[str, Any]:
         # TODO: Confirm exact endpoint/params against current API-Football docs.
@@ -194,9 +197,7 @@ class ApiFootballClient:
 
         headers = self._headers()
         try:
-            with httpx.Client(base_url=self.base_url, headers=headers, timeout=self.timeout) as client:
-                response = client.get(endpoint.lstrip("/"), params=params)
-                response.raise_for_status()
+            response = self._request_with_retry(endpoint, params, headers)
         except httpx.HTTPStatusError as exc:
             logger.warning("API-Football returned HTTP status error: %s", exc.response.status_code)
             return self._http_error(exc, endpoint, params)
@@ -227,6 +228,32 @@ class ApiFootballClient:
                 "paging": payload.get("paging") or {},
             },
         }
+
+    def _request_with_retry(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None,
+        headers: dict[str, str],
+    ) -> httpx.Response:
+        last_error: httpx.HTTPError | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                with httpx.Client(base_url=self.base_url, headers=headers, timeout=self.timeout) as client:
+                    response = client.get(endpoint.lstrip("/"), params=params)
+                    response.raise_for_status()
+                    return response
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code not in {429, 500, 502, 503, 504} or attempt >= self.max_retries:
+                    raise
+                last_error = exc
+            except (httpx.ConnectError, httpx.ReadTimeout, httpx.RemoteProtocolError) as exc:
+                if attempt >= self.max_retries:
+                    raise
+                last_error = exc
+            sleep(0.25 * (2**attempt))
+        if last_error is not None:
+            raise last_error
+        raise httpx.RequestError("API-Football request failed", request=None)
 
     def _headers(self) -> dict[str, str]:
         if not self.api_key:

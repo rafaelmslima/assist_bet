@@ -11,11 +11,11 @@ from app.web.security import hash_password
 def main() -> None:
     parser = argparse.ArgumentParser(description="Create a dashboard web user.")
     parser.add_argument("--email", required=True)
-    parser.add_argument("--password")
+    parser.add_argument("--password", help=argparse.SUPPRESS)
     parser.add_argument("--role", default="admin")
     args = parser.parse_args()
 
-    password = args.password or getpass.getpass("Password: ")
+    password = getpass.getpass("Password: ") if args.password is None else args.password
     if len(password) < 8:
         raise SystemExit("Password must have at least 8 characters.")
 

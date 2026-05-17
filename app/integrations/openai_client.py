@@ -2,6 +2,7 @@
 
 import json
 import logging
+from time import sleep
 from typing import Any
 
 import httpx
@@ -13,10 +14,17 @@ logger = logging.getLogger(__name__)
 
 
 class OpenAIClient:
-    def __init__(self, api_key: str | None = None, model: str | None = None, timeout: float = 20.0) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str | None = None,
+        timeout: float = 20.0,
+        max_retries: int = 2,
+    ) -> None:
         self.api_key = api_key or settings.openai_api_key
         self.model = model or settings.openai_model
         self.timeout = timeout
+        self.max_retries = max(0, max_retries)
 
     def is_enabled(self) -> bool:
         return bool(self.api_key)
@@ -110,16 +118,24 @@ class OpenAIClient:
         return self._chat_completion(payload, log_label="OpenAI explanation fallback acionado")
 
     def _chat_completion(self, payload: dict[str, Any], *, log_label: str) -> str | None:
-        try:
-            with httpx.Client(timeout=self.timeout) as client:
-                resp = client.post(
-                    "https://api.openai.com/v1/chat/completions",
-                    headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
-                    json=payload,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return data["choices"][0]["message"]["content"]
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("%s: %s", log_label, exc)
-            return None
+        for attempt in range(self.max_retries + 1):
+            try:
+                with httpx.Client(timeout=self.timeout) as client:
+                    resp = client.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"},
+                        json=payload,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    return data["choices"][0]["message"]["content"]
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code not in {429, 500, 502, 503, 504} or attempt >= self.max_retries:
+                    logger.warning("%s: %s", log_label, exc)
+                    return None
+            except Exception as exc:  # noqa: BLE001
+                if attempt >= self.max_retries:
+                    logger.warning("%s: %s", log_label, exc)
+                    return None
+            sleep(0.25 * (2**attempt))
+        return None
